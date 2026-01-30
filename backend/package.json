@@ -1,0 +1,29 @@
+{
+  "name": "will-be-backend",
+  "version": "1.0.0",
+  "description": "Will-Be Backend API - Will writing platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "migrate": "node src/db/migrate.js up",
+    "migrate:down": "node src/db/migrate.js down",
+    "migrate:reset": "node src/db/migrate.js reset",
+    "seed": "node src/db/seeds/index.js",
+    "db:setup": "npm run migrate && npm run seed",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
+  },
+  "keywords": [
+    "will",
+    "testament",
+    "legal",
+    "estate",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

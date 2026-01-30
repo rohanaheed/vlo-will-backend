@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Build output
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+BACKEND_PLAN.md
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Uploaded files (if stored locally)
+uploads/
+
+# Generated PDFs (if stored locally)
+generated/

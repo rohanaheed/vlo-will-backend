@@ -1,0 +1,50 @@
+{
+  "name": "will-be",
+  "version": "1.0.0",
+  "description": "Will-Be - Online Will Writing Platform",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "migrate": "node backend/src/db/migrate.js up",
+    "migrate:down": "node backend/src/db/migrate.js down",
+    "migrate:reset": "node backend/src/db/migrate.js reset",
+    "seed": "node backend/src/db/seeds/index.js",
+    "db:setup": "npm run migrate && npm run seed",
+    "db:reset": "npm run migrate:reset && npm run seed",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["will", "testament", "legal", "estate"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "express-session": "^1.19.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "kysely": "^0.28.10",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "nodemailer": "^7.0.13",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "passport-local": "^1.0.0",
+    "pdfkit": "^0.17.2",
+    "pg": "^8.17.2",
+    "puppeteer": "^24.36.1",
+    "stripe": "^20.3.0",
+    "uuid": "^13.0.0",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}
