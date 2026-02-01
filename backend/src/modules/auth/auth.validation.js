@@ -29,10 +29,16 @@ const forgotPasswordSchema = {
   }),
 };
 
+const resendPasswordResetSchema = {
+  body: z.object({
+    email: z.string().email('Invalid email address').toLowerCase().trim(),
+  }),
+};
+
 const resetPasswordSchema = {
   body: z.object({
     token: z.string().min(1, 'Token is required'),
-    password: z
+    new_password: z
       .string()
       .min(8, 'Password must be at least 8 characters')
       .regex(
@@ -41,6 +47,7 @@ const resetPasswordSchema = {
       ),
   }),
 };
+
 
 const verifyEmailSchema = {
   body: z.object({
@@ -56,7 +63,6 @@ const resendVerificationEmailSchema = {
 
 const changePasswordSchema = {
   body: z.object({
-    current_password: z.string().min(1, 'Current password is required'),
     new_password: z
       .string()
       .min(8, 'Password must be at least 8 characters')
@@ -78,6 +84,7 @@ module.exports = {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  resendPasswordResetSchema,
   verifyEmailSchema,
   resendVerificationEmailSchema,
   changePasswordSchema,

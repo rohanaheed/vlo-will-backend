@@ -239,6 +239,78 @@ const forgotPassword = async (email) => {
 };
 
 /**
+ * Resend password reset token
+ */
+const resendPasswordReset = async (email) => {
+  const user = await db
+    .selectFrom('users')
+    .select(['id', 'email', 'first_name'])
+    .where('email', '=', email)
+    .executeTakeFirst();
+
+  if (!user) {
+    // Don't reveal if user exists
+    logger.warn('Password reset resend requested for non-existent email', { email });
+    return;
+  }
+
+  // Check if there's an active password reset token
+  const resetRecord = await db
+    .selectFrom('password_resets')
+    .select(['expires_at'])
+    .where('user_id', '=', user.id)
+    .where('used_at', 'is', null)
+    .executeTakeFirst();
+
+  // If there's an active token that hasn't expired, don't allow resend yet
+  if (resetRecord && new Date() < resetRecord.expires_at) {
+    throw new BadRequestError('Please wait before requesting a new password reset email');
+  }
+
+  // Delete any existing unused tokens
+  await db
+    .deleteFrom('password_resets')
+    .where('user_id', '=', user.id)
+    .where('used_at', 'is', null)
+    .execute();
+
+  // Create new reset token
+  const token = generateToken();
+  const hashedToken = hashToken(token);
+
+  // Store token (expires in 1 hour)
+  await db
+    .insertInto('password_resets')
+    .values({
+      id: generateUUID(),
+      user_id: user.id,
+      token: hashedToken,
+      expires_at: new Date(Date.now() + 60 * 60 * 1000),
+      created_at: new Date(),
+    })
+    .execute();
+
+  // Send reset email
+  const resetLink = `${config.frontendUrl}/reset-password?token=${token}`;
+
+  await sendEmail({
+    to: user.email,
+    subject: 'Password Reset Request',
+    html: `
+      <h1>Password Reset</h1>
+      <p>Hi ${user.first_name},</p>
+      <p>You requested to reset your password. Click the link below to reset it:</p>
+      <a href="${resetLink}">Reset Password</a>
+      <p>This link expires in 1 hour.</p>
+      <p>If you didn't request this, please ignore this email.</p>
+    `,
+    text: `Hi ${user.first_name}, Reset your password here: ${resetLink}`,
+  });
+
+  logger.info('Password reset email resent', { userId: user.id, email });
+};
+
+/**
  * Reset password with token
  */
 const resetPassword = async (token, newPassword) => {
@@ -289,7 +361,7 @@ const resetPassword = async (token, newPassword) => {
 /**
  * Change password (authenticated user)
  */
-const changePassword = async (userId, currentPassword, newPassword) => {
+const changePassword = async (userId, newPassword) => {
   // Get current password hash
   const user = await db
     .selectFrom('users')
@@ -299,13 +371,6 @@ const changePassword = async (userId, currentPassword, newPassword) => {
 
   if (!user) {
     throw new NotFoundError('User');
-  }
-
-  // Verify current password
-  const isValid = await bcrypt.compare(currentPassword, user.password_hash);
-
-  if (!isValid) {
-    throw new UnauthorizedError('Current password is incorrect');
   }
 
   // Hash new password
@@ -501,6 +566,7 @@ module.exports = {
   generateTokens,
   refreshAccessToken,
   forgotPassword,
+  resendPasswordReset,
   resetPassword,
   changePassword,
   verifyEmail,

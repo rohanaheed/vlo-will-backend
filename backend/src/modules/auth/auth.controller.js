@@ -118,10 +118,30 @@ const forgotPassword = async (req, res, next) => {
  */
 const resetPassword = async (req, res, next) => {
   try {
-    const { token, password } = req.body;
-    await authService.resetPassword(token, password);
+    const { token, new_password } = req.body;
+    await authService.resetPassword(token, new_password);
 
     return sendSuccess(res, null, 'Password reset successful. You can now login with your new password.');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Resend password reset token
+ * POST /api/v1/auth/resend-password-reset
+ */
+const resendPasswordReset = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    await authService.resendPasswordReset(email);
+
+    // Always return success to prevent email enumeration
+    return sendSuccess(
+      res,
+      null,
+      'If your email is registered, you will receive a password reset link.'
+    );
   } catch (error) {
     next(error);
   }
@@ -182,8 +202,8 @@ const me = async (req, res, next) => {
  */
 const changePassword = async (req, res, next) => {
   try {
-    const { current_password, new_password } = req.body;
-    await authService.changePassword(req.user.id, current_password, new_password);
+    const { new_password } = req.body;
+    await authService.changePassword(req.user.id, new_password);
 
     await createAuditLog({
       userId: req.user.id,
@@ -207,9 +227,12 @@ const changePassword = async (req, res, next) => {
 const googleCallback = async (req, res, next) => {
   passport.authenticate('google', { session: false }, async (err, user, info) => {
     try {
-      if (err) {
-        logger.error('Google authentication error:', err);
-        return res.redirect(`${config.frontendUrl}/auth/login?error=google_auth_failed`);
+          if (err) {
+        console.error('🔥 GOOGLE AUTH ERR:', err);
+        return res.status(500).json({
+          error: 'google_auth_failed',
+          details: err.message || err,
+        });
       }
 
       if (!user) {
@@ -260,6 +283,7 @@ module.exports = {
   refreshToken,
   forgotPassword,
   resetPassword,
+  resendPasswordReset,
   verifyEmail,
   resendVerificationEmail,
   me,

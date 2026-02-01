@@ -119,6 +119,9 @@ const googleStrategy = new GoogleStrategy(
         return done(null, false, { message: 'No email provided by Google' });
       }
 
+      // Generate a fake password for Google OAuth users
+      const fakePassword = await bcrypt.hash(crypto.randomUUID().toString(), 12);
+
       // Check if user already exists
       let user = await db
         .selectFrom('users')
@@ -145,7 +148,8 @@ const googleStrategy = new GoogleStrategy(
           .insertInto('users')
           .values({
             id: userId,
-            email: email,
+            email: email.toLowerCase(),
+            password_hash: fakePassword,
             first_name: firstName,
             last_name: lastName,
             google_id: googleId,

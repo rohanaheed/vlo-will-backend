@@ -67,6 +67,18 @@ router.post(
 );
 
 /**
+ * @route   POST /api/v1/auth/resend-password-reset
+ * @desc    Resend password reset token
+ * @access  Public
+ */
+router.post(
+  '/resend-password-reset-email',
+  passwordResetLimiter,
+  validate(authValidation.resendPasswordResetSchema),
+  authController.resendPasswordReset
+);
+
+/**
  * @route   POST /api/v1/auth/reset-password
  * @desc    Reset password with token
  * @access  Public
