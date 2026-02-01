@@ -51,6 +51,14 @@ const config = {
   
   // Frontend
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
+  frontendPublicUrl: process.env.FRONTEND_PUBLIC_URL || 'http://localhost:3001',
+  
+  // Google OAuth
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/api/v1/auth/google/callback',
+  },
   
   // Rate Limiting
   rateLimit: {

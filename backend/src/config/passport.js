@@ -1,9 +1,11 @@
 const passport = require('passport');
 const { Strategy: LocalStrategy } = require('passport-local');
 const { Strategy: JwtStrategy, ExtractJwt } = require('passport-jwt');
+const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
 const bcrypt = require('bcrypt');
 const { config } = require('./index');
 const { db } = require('./database');
+const { generateUUID } = require('../utils/helpers');
 const logger = require('../utils/logger');
 
 // Local Strategy - for email/password login
@@ -97,10 +99,81 @@ const jwtStrategy = new JwtStrategy(jwtOptions, async (payload, done) => {
   }
 });
 
+// Google OAuth Strategy
+const googleStrategy = new GoogleStrategy(
+  {
+    clientID: config.google.clientId,
+    clientSecret: config.google.clientSecret,
+    callbackURL: config.google.callbackURL,
+    passReqToCallback: true,
+  },
+  async (req, accessToken, refreshToken, profile, done) => {
+    try {
+      const email = profile.emails?.[0]?.value;
+      const firstName = profile.name?.givenName || '';
+      const lastName = profile.name?.familyName || '';
+      const googleId = profile.id;
+
+      if (!email) {
+        return done(null, false, { message: 'No email provided by Google' });
+      }
+
+      // Check if user already exists
+      let user = await db
+        .selectFrom('users')
+        .selectAll()
+        .where('email', '=', email.toLowerCase())
+        .executeTakeFirst();
+
+      if (user) {
+        // User exists, update google_id if not set
+        if (!user.google_id) {
+          user = await db
+            .updateTable('users')
+            .set({ google_id: googleId })
+            .where('id', '=', user.id)
+            .returningAll()
+            .executeTakeFirst();
+          
+          logger.info('Updated user with Google ID', { userId: user.id, email });
+        }
+      } else {
+        // Create new user from Google profile
+        const userId = generateUUID();
+        user = await db
+          .insertInto('users')
+          .values({
+            id: userId,
+            email: email,
+            first_name: firstName,
+            last_name: lastName,
+            google_id: googleId,
+            is_active: true,
+            is_email_verified: true, // Google emails are pre-verified
+            email_verified_at: new Date(),
+            role_id: ROLE_IDS.USER, // USER role ID
+            created_at: new Date(),
+            updated_at: new Date(),
+          })
+          .returningAll()
+          .executeTakeFirst();
+
+        logger.info('New user created via Google OAuth', { userId: user.id, email });
+      }
+
+      return done(null, user);
+    } catch (error) {
+      logger.error('Error in Google strategy:', error);
+      return done(error);
+    }
+  }
+);
+
 // Initialize passport strategies
 const initializePassport = () => {
   passport.use('local', localStrategy);
   passport.use('jwt', jwtStrategy);
+  passport.use('google', googleStrategy);
 
   // Serialize user for session
   passport.serializeUser((user, done) => {

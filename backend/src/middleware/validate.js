@@ -66,8 +66,10 @@ const validate = (schema) => {
  * @returns {Array} Formatted errors
  */
 const formatZodErrors = (zodError, location) => {
-  return zodError.errors.map((err) => ({
-    field: err.path.length > 0 ? err.path.join('.') : location,
+  const issues = zodError?.issues || [];
+
+  return issues.map((err) => ({
+    field: err.path && err.path.length > 0 ? err.path.join('.') : location,
     message: err.message,
     location,
     code: err.code,
@@ -88,7 +90,7 @@ const validateValue = (schema, value, fieldName = 'value') => {
     return { success: true, data: result.data, errors: null };
   }
 
-  const errors = result.error.errors.map((err) => ({
+  const errors = (result.error?.issues || []).map((err) => ({
     field: fieldName,
     message: err.message,
     code: err.code,

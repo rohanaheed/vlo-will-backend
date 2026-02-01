@@ -2,6 +2,9 @@ const authService = require('./auth.service');
 const { sendSuccess, sendCreated } = require('../../utils/response');
 const { createAuditLog } = require('../../middleware/audit');
 const { AUDIT_ACTIONS } = require('../../utils/constants');
+const { passport } = require('../../config/passport');
+const logger = require('../../utils/logger');
+const { config } = require('../../config');
 
 /**
  * Register new user
@@ -131,9 +134,29 @@ const resetPassword = async (req, res, next) => {
 const verifyEmail = async (req, res, next) => {
   try {
     const { token } = req.body;
-    await authService.verifyEmail(token);
+    const result = await authService.verifyEmail(token);
 
-    return sendSuccess(res, null, 'Email verified successfully');
+    return sendSuccess(res, result, 'Email verified successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Resend email verification token
+ * POST /api/v1/auth/resend-verification-email
+ */
+const resendVerificationEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    await authService.resendVerificationEmail(email);
+
+    // Always return success to prevent email enumeration
+    return sendSuccess(
+      res,
+      null,
+      'If the email is registered and not yet verified, you will receive a verification link.'
+    );
   } catch (error) {
     next(error);
   }
@@ -177,6 +200,59 @@ const changePassword = async (req, res, next) => {
   }
 };
 
+/**
+ * Google OAuth login callback
+ * GET /api/v1/auth/google/callback
+ */
+const googleCallback = async (req, res, next) => {
+  passport.authenticate('google', { session: false }, async (err, user, info) => {
+    try {
+      if (err) {
+        logger.error('Google authentication error:', err);
+        return res.redirect(`${config.frontendUrl}/auth/login?error=google_auth_failed`);
+      }
+
+      if (!user) {
+        const message = info?.message || 'Google authentication failed';
+        logger.warn('Google auth failed:', message);
+        return res.redirect(`${config.frontendUrl}/auth/login?error=${encodeURIComponent(message)}`);
+      }
+
+      // Generate tokens
+      const tokens = authService.generateTokens(user.id);
+
+      await createAuditLog({
+        userId: user.id,
+        action: AUDIT_ACTIONS.LOGIN,
+        entityType: 'user',
+        entityId: user.id,
+        newValues: { provider: 'google' },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+      });
+
+      // Redirect to frontend with tokens in query params
+      const redirectUrl = new URL(`${config.frontendUrl}/auth/callback`);
+      redirectUrl.searchParams.append('access_token', tokens.accessToken);
+      redirectUrl.searchParams.append('refresh_token', tokens.refreshToken);
+      redirectUrl.searchParams.append('user_id', user.id);
+
+      res.redirect(redirectUrl.toString());
+    } catch (error) {
+      logger.error('Error in Google callback:', error);
+      res.redirect(`${config.frontendUrl}/auth/login?error=token_generation_failed`);
+    }
+  })(req, res, next);
+};
+
+/**
+ * Google OAuth login initiation
+ * GET /api/v1/auth/google
+ */
+const googleLogin = (req, res, next) => {
+  passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+};
+
 module.exports = {
   register,
   login,
@@ -185,6 +261,9 @@ module.exports = {
   forgotPassword,
   resetPassword,
   verifyEmail,
+  resendVerificationEmail,
   me,
   changePassword,
+  googleLogin,
+  googleCallback,
 };

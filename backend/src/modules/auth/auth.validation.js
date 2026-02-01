@@ -48,6 +48,12 @@ const verifyEmailSchema = {
   }),
 };
 
+const resendVerificationEmailSchema = {
+  body: z.object({
+    email: z.string().email('Invalid email address').toLowerCase().trim(),
+  }),
+};
+
 const changePasswordSchema = {
   body: z.object({
     current_password: z.string().min(1, 'Current password is required'),
@@ -73,6 +79,7 @@ module.exports = {
   forgotPasswordSchema,
   resetPasswordSchema,
   verifyEmailSchema,
+  resendVerificationEmailSchema,
   changePasswordSchema,
   refreshTokenSchema,
 };

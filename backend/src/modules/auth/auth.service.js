@@ -59,9 +59,42 @@ const register = async ({ email, password, first_name, last_name, phone }) => {
 
   // Generate email verification token
   const verificationToken = generateToken();
-  // TODO: Store token and send verification email
+  const hashedToken = hashToken(verificationToken);
 
-  logger.info('New user registered', { userId: user.id, email });
+  // Store verification token (expires in 24 hours)
+  await db
+    .insertInto('email_verification_tokens')
+    .values({
+      id: generateUUID(),
+      user_id: userId,
+      email: user.email,
+      token: hashedToken,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      created_at: new Date(),
+    })
+    .execute();
+
+  // Send verification email
+  const verificationLink = `${config.frontendUrl}/verify-email?token=${verificationToken}`;
+
+  await sendEmail({
+    to: user.email,
+    subject: 'Verify Your Email Address',
+    html: `
+      <h1>Welcome to Will-Be!</h1>
+      <p>Hi ${user.first_name},</p>
+      <p>Thank you for registering. Please verify your email address to activate your account:</p>
+      <a href="${verificationLink}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">
+        Verify Email
+      </a>
+      <p>Or copy this link: ${verificationLink}</p>
+      <p>This link expires in 24 hours.</p>
+      <p>If you didn't create this account, you can ignore this email.</p>
+    `,
+    text: `Hi ${user.first_name}, Verify your email here: ${verificationLink}`,
+  });
+
+  logger.info('Email verification token sent', { userId: user.id, email });
 
   return user;
 };
@@ -295,9 +328,142 @@ const changePassword = async (userId, currentPassword, newPassword) => {
  * Verify email address
  */
 const verifyEmail = async (token) => {
-  // TODO: Implement email verification with stored tokens
-  // For now, this is a placeholder
-  throw new BadRequestError('Email verification not implemented yet');
+  const hashedToken = hashToken(token);
+
+  // Find valid token
+  const verificationRecord = await db
+    .selectFrom('email_verification_tokens')
+    .select(['id', 'user_id', 'expires_at', 'used_at'])
+    .where('token', '=', hashedToken)
+    .executeTakeFirst();
+
+  if (!verificationRecord) {
+    throw new BadRequestError('Invalid or expired verification token');
+  }
+
+  if (verificationRecord.used_at) {
+    throw new BadRequestError('Verification token already used');
+  }
+
+  if (new Date() > verificationRecord.expires_at) {
+    throw new BadRequestError('Verification token expired');
+  }
+
+  // Get user
+  const user = await db
+    .selectFrom('users')
+    .select(['id', 'email'])
+    .where('id', '=', verificationRecord.user_id)
+    .executeTakeFirst();
+
+  if (!user) {
+    throw new NotFoundError('User');
+  }
+
+  // Update user - mark email as verified
+  await db
+    .updateTable('users')
+    .set({
+      is_email_verified: true,
+      email_verified_at: new Date(),
+      updated_at: new Date(),
+    })
+    .where('id', '=', verificationRecord.user_id)
+    .execute();
+
+  // Mark token as used
+  await db
+    .updateTable('email_verification_tokens')
+    .set({ used_at: new Date() })
+    .where('id', '=', verificationRecord.id)
+    .execute();
+
+  logger.info('Email verified successfully', { userId: verificationRecord.user_id, email: user.email });
+
+  return {
+    message: 'Email verified successfully. You can now login.',
+    email: user.email,
+  };
+};
+
+/**
+ * Resend email verification token
+ */
+const resendVerificationEmail = async (email) => {
+  const user = await db
+    .selectFrom('users')
+    .select(['id', 'email', 'first_name', 'is_email_verified'])
+    .where('email', '=', email)
+    .executeTakeFirst();
+
+  if (!user) {
+    // Don't reveal if user exists
+    logger.warn('Verification email requested for non-existent email', { email });
+    return;
+  }
+
+  if (user.is_email_verified) {
+    logger.warn('Verification email requested for already verified user', { userId: user.id, email });
+    return;
+  }
+
+  // Check if there's an active verification token
+  const verificationRecord = await db
+    .selectFrom('email_verification_tokens')
+    .select(['expires_at'])
+    .where('user_id', '=', user.id)
+    .where('used_at', 'is', null)
+    .executeTakeFirst();
+
+  // If there's an active token that hasn't expired, don't allow resend yet
+  if (verificationRecord && new Date() < verificationRecord.expires_at) {
+    throw new BadRequestError('Please wait before requesting a new verification email');
+  }
+
+  // Delete any existing unused tokens
+  await db
+    .deleteFrom('email_verification_tokens')
+    .where('user_id', '=', user.id)
+    .where('used_at', 'is', null)
+    .execute();
+
+  // Generate new verification token
+  const verificationToken = generateToken();
+  const hashedToken = hashToken(verificationToken);
+
+  // Store verification token (expires in 24 hours)
+  await db
+    .insertInto('email_verification_tokens')
+    .values({
+      id: generateUUID(),
+      user_id: user.id,
+      email: user.email,
+      token: hashedToken,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      created_at: new Date(),
+    })
+    .execute();
+
+  // Send verification email
+  const verificationLink = `${config.frontendPublicUrl}/verify-email?token=${verificationToken}`;
+
+  await sendEmail({
+    to: user.email,
+    subject: 'Verify Your Email Address',
+    html: `
+      <h1>Verify Your Email</h1>
+      <p>Hi ${user.first_name},</p>
+      <p>Please verify your email address to complete your registration:</p>
+      <a href="${verificationLink}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">
+        Verify Email
+      </a>
+      <p>Or copy this link: ${verificationLink}</p>
+      <p>This link expires in 24 hours.</p>
+    `,
+    text: `Hi ${user.first_name}, Verify your email here: ${verificationLink}`,
+  });
+
+  logger.info('Verification email resent', { userId: user.id, email });
 };
 
 /**
@@ -338,5 +504,6 @@ module.exports = {
   resetPassword,
   changePassword,
   verifyEmail,
+  resendVerificationEmail,
   getCurrentUser,
 };

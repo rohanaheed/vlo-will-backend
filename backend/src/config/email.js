@@ -5,11 +5,12 @@ const logger = require('../utils/logger');
 let transporter = null;
 
 const initializeEmailTransporter = () => {
-  if (config.email.host && config.email.user && config.email.pass) {
+  if (config.email.user && config.email.pass) {
     transporter = nodemailer.createTransport({
-      host: config.email.host,
-      port: config.email.port,
-      secure: config.email.port === 465,
+      // host: config.email.host,
+      // port: config.email.port,
+      // secure: config.email.port === 465,
+      service:'gmail',
       auth: {
         user: config.email.user,
         pass: config.email.pass,

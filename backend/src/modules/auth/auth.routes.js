@@ -91,6 +91,18 @@ router.post(
 );
 
 /**
+ * @route   POST /api/v1/auth/resend-verification-email
+ * @desc    Resend email verification token
+ * @access  Public
+ */
+router.post(
+  '/resend-verification-email',
+  emailVerificationLimiter,
+  validate(authValidation.resendVerificationEmailSchema),
+  authController.resendVerificationEmail
+);
+
+/**
  * @route   GET /api/v1/auth/me
  * @desc    Get current user profile
  * @access  Private
@@ -111,6 +123,27 @@ router.post(
   authenticate,
   validate(authValidation.changePasswordSchema),
   authController.changePassword
+);
+
+/**
+ * @route   GET /api/v1/auth/google
+ * @desc    Initiate Google OAuth login
+ * @access  Public
+ */
+router.get(
+  '/google',
+  authLimiter,
+  authController.googleLogin
+);
+
+/**
+ * @route   GET /api/v1/auth/google/callback
+ * @desc    Google OAuth callback
+ * @access  Public
+ */
+router.get(
+  '/google/callback',
+  authController.googleCallback
 );
 
 module.exports = router;
