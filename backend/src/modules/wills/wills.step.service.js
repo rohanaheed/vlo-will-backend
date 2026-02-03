@@ -2,11 +2,14 @@
  * Unified Step Service
  * Handles saving step data and auto-advancing in a single operation
  * 
- * STEP LOCKING LOGIC:
- * - Steps 1 to highest_completed_step are LOCKED (view only)
- * - User can only edit the current step (highest_completed_step + 1)
- * - After payment (is_paid=true, edit_unlocked=true), all steps are editable
- * - After editing post-payment, edit_unlocked becomes false (locked again)
+ * STEP LOCKING LOGIC (Updated):
+ * - BEFORE PAYMENT: User can freely edit ANY step (completed or current)
+ *   - Can go back to previous steps, edit, save and continue
+ *   - No locking before payment
+ * - AFTER PAYMENT (is_paid=true): All steps are LOCKED
+ *   - User must pay again to unlock for editing
+ * - AFTER UNLOCK (is_paid=true, edit_unlocked=true): All steps are editable
+ *   - After saving an edit, edit_unlocked becomes false (locked again)
  */
 
 const { db } = require('../../db');
@@ -40,6 +43,11 @@ const getWillWithAccess = async (willId, userId, userRole) => {
 
 /**
  * Check if a step is editable
+ * 
+ * NEW LOGIC:
+ * - Before payment: User can edit any step up to current progress
+ * - After payment: All steps locked unless edit_unlocked=true
+ * 
  * @param {object} will - Will object
  * @param {number} stepNumber - Step to check
  * @returns {object} { canEdit: boolean, reason: string }
@@ -47,39 +55,33 @@ const getWillWithAccess = async (willId, userId, userRole) => {
 const checkStepEditable = (will, stepNumber) => {
   const highestCompleted = will.highest_completed_step || 0;
   
-  // If will is completed/signed and not unlocked for editing
-  if ([WILL_STATUSES.COMPLETED, WILL_STATUSES.SIGNED].includes(will.status)) {
-    if (!will.is_paid) {
-      return { canEdit: false, reason: 'Will is completed. Payment required to edit.' };
+  // CASE 1: Will has been paid for
+  if (will.is_paid) {
+    // If edit is unlocked (paid to edit again), allow editing
+    if (will.edit_unlocked) {
+      // Can edit any step up to highest completed or current
+      if (stepNumber <= highestCompleted + 1) {
+        return { canEdit: true, reason: null };
+      }
+      return { 
+        canEdit: false, 
+        reason: `Cannot access step ${stepNumber}. Please complete step ${highestCompleted + 1} first.` 
+      };
     }
-    if (!will.edit_unlocked) {
-      return { canEdit: false, reason: 'Editing is locked. Payment required to unlock editing.' };
-    }
-    // Paid and unlocked - can edit
-    return { canEdit: true, reason: null };
-  }
-
-  // Will is still in progress (draft/in_progress)
-  // Check if step is locked (already completed)
-  if (stepNumber <= highestCompleted) {
-    // Step is locked - user already completed this step
-    // They can only view, not edit (unless paid and unlocked)
-    if (will.is_paid && will.edit_unlocked) {
-      return { canEdit: true, reason: null };
-    }
+    // Paid but not unlocked - locked for editing
     return { 
       canEdit: false, 
-      reason: `Step ${stepNumber} is locked. You have already completed this step.` 
+      reason: 'Will is locked after payment. Payment required to unlock editing.' 
     };
   }
 
-  // Step is not yet completed - can edit
-  // But only if it's the next step to complete (current step)
-  if (stepNumber === highestCompleted + 1) {
+  // CASE 2: Will has NOT been paid for - free to edit any completed step
+  // Can edit any step up to current progress
+  if (stepNumber <= highestCompleted + 1) {
     return { canEdit: true, reason: null };
   }
 
-  // Trying to skip steps
+  // Trying to skip ahead
   return { 
     canEdit: false, 
     reason: `Cannot access step ${stepNumber}. Please complete step ${highestCompleted + 1} first.` 
@@ -88,20 +90,46 @@ const checkStepEditable = (will, stepNumber) => {
 
 /**
  * Get step status for frontend
+ * 
+ * Status values:
+ * - 'completed': Step is done (before payment - still editable)
+ * - 'current': Current step to fill
+ * - 'upcoming': Future step, not accessible yet
+ * - 'locked': Paid and locked (cannot edit)
+ * - 'editable': Paid and unlocked (can edit)
+ * 
  * @param {object} will - Will object
  * @param {number} stepNumber - Step to check
- * @returns {string} 'locked' | 'current' | 'upcoming' | 'editable'
+ * @returns {string} 'completed' | 'current' | 'upcoming' | 'locked' | 'editable'
  */
 const getStepStatus = (will, stepNumber) => {
   const highestCompleted = will.highest_completed_step || 0;
   
-  // If paid and unlocked, all steps are editable
-  if (will.is_paid && will.edit_unlocked) {
-    return 'editable';
+  // CASE 1: Will has been paid
+  if (will.is_paid) {
+    if (will.edit_unlocked) {
+      // Paid and unlocked - editable
+      if (stepNumber <= highestCompleted) {
+        return 'editable';
+      }
+      if (stepNumber === highestCompleted + 1) {
+        return 'current';
+      }
+      return 'upcoming';
+    }
+    // Paid but locked
+    if (stepNumber <= highestCompleted) {
+      return 'locked';
+    }
+    if (stepNumber === highestCompleted + 1) {
+      return 'locked'; // Current step also locked after payment
+    }
+    return 'upcoming';
   }
 
+  // CASE 2: Not paid yet - steps are editable before payment
   if (stepNumber <= highestCompleted) {
-    return 'locked'; // Completed and locked
+    return 'completed'; // Done but still editable (before payment)
   }
   
   if (stepNumber === highestCompleted + 1) {
@@ -171,21 +199,37 @@ const saveStepData = async (willId, stepNumber, stepData, userId, userRole, opti
       }
 
       // If this was a post-payment edit, lock editing after save
+      // User gets ONE edit session after paying, then locked again
       if (isPostPaymentEdit) {
         newEditUnlocked = false;
         logger.info('Post-payment edit completed, locking edits', { willId, stepNumber });
       }
+      // NOTE: Before payment, NO locking - user can freely go back and edit
     } else if (action === 'save_and_back') {
       // Go back one step (but not below 1)
       newCurrentStep = Math.max(stepNumber - 1, 1);
       
-      // If post-payment edit, keep unlocked while navigating back
-      // Only lock when they actually save with save_and_continue
+      // Update highest completed if this step wasn't completed before
+      if (stepNumber > newHighestCompleted) {
+        newHighestCompleted = stepNumber;
+      }
+      
+      // If post-payment edit, lock after saving (even when going back)
+      if (isPostPaymentEdit) {
+        newEditUnlocked = false;
+        logger.info('Post-payment edit completed (back), locking edits', { willId, stepNumber });
+      }
     } else if (action === 'save') {
-      // Just save, don't change step or lock
+      // Just save, don't change step
       // Update highest completed if needed
       if (stepNumber > newHighestCompleted) {
         newHighestCompleted = stepNumber;
+      }
+      
+      // If post-payment edit, lock after saving
+      if (isPostPaymentEdit) {
+        newEditUnlocked = false;
+        logger.info('Post-payment edit completed (save only), locking edits', { willId, stepNumber });
       }
     }
 
@@ -287,14 +331,14 @@ const saveStepSpecificData = async (trx, willId, stepNumber, stepData, will) => 
       await upsertTestator(trx, willId, stepData);
       break;
 
-    case 2: // Spouse
+    case 2: // Executors (swapped - was step 3)
+      await saveExecutors(trx, willId, stepData);
+      break;
+
+    case 3: // Spouse (swapped - was step 2)
       if (will.marital_status !== 'single') {
         await upsertSpouse(trx, willId, stepData);
       }
-      break;
-
-    case 3: // Executors
-      await saveExecutors(trx, willId, stepData);
       break;
 
     case 4: // Children
@@ -348,9 +392,35 @@ const saveStepSpecificData = async (trx, willId, stepNumber, stepData, will) => 
 
 /**
  * Upsert testator (Step 1)
+ * Also updates jurisdiction and marital_status on wills table if provided
  */
 const upsertTestator = async (trx, willId, data) => {
   if (!data || Object.keys(data).length === 0) return;
+
+  // Extract fields that go to wills table
+  const { jurisdiction, marital_status, ...testatorData } = data;
+
+  // Build wills update object
+  const willsUpdate = {};
+  if (jurisdiction) willsUpdate.jurisdiction = jurisdiction;
+  if (marital_status) willsUpdate.marital_status = marital_status;
+
+  // Update wills table if there are fields to update
+  if (Object.keys(willsUpdate).length > 0) {
+    await trx
+      .updateTable('wills')
+      .set({ ...willsUpdate, updated_at: new Date() })
+      .where('id', '=', willId)
+      .execute();
+  }
+
+  // Also save marital_status to testators table for reference
+  if (marital_status) {
+    testatorData.marital_status = marital_status;
+  }
+
+  // Skip if no testator data to save
+  if (Object.keys(testatorData).length === 0) return;
 
   const existing = await trx
     .selectFrom('testators')
@@ -361,7 +431,7 @@ const upsertTestator = async (trx, willId, data) => {
   if (existing) {
     await trx
       .updateTable('testators')
-      .set({ ...data, updated_at: new Date() })
+      .set({ ...testatorData, updated_at: new Date() })
       .where('id', '=', existing.id)
       .execute();
   } else {
@@ -370,7 +440,7 @@ const upsertTestator = async (trx, willId, data) => {
       .values({
         id: generateUUID(),
         will_id: willId,
-        ...data,
+        ...testatorData,
         created_at: new Date(),
         updated_at: new Date(),
       })
@@ -413,6 +483,7 @@ const upsertSpouse = async (trx, willId, data) => {
 /**
  * Save executors (Step 3)
  * Handles array of executors with full replace strategy
+ * Supports both Individual and Professional Advisor executors
  */
 const saveExecutors = async (trx, willId, data) => {
   if (!data || !data.executors) return;
@@ -430,18 +501,37 @@ const saveExecutors = async (trx, willId, data) => {
     const executorRecords = executors.map((executor, index) => ({
       id: executor.id || generateUUID(),
       will_id: willId,
+      
+      // Executor type
+      executor_type: executor.executor_type || 'individual',
+      
+      // Individual fields
+      title: executor.title,
       full_name: executor.full_name,
+      relationship_to_testator: executor.relationship_to_testator,
+      
+      // Professional advisor fields
+      business_name: executor.business_name,
+      role_title: executor.role_title,
+      
+      // Contact details
+      phone_country_code: executor.phone_country_code,
+      phone: executor.phone,
+      email: executor.email,
+      
+      // Executor role flags
+      is_alternate: executor.is_alternate || false,
+      is_backup: executor.is_backup || false,
+      is_spouse: executor.is_spouse || false,
+      
+      // Legacy address fields
       address_line_1: executor.address_line_1,
       address_line_2: executor.address_line_2,
       city: executor.city,
       county: executor.county,
       postcode: executor.postcode,
       country: executor.country,
-      relationship_to_testator: executor.relationship_to_testator,
-      email: executor.email,
-      phone: executor.phone,
-      is_spouse: executor.is_spouse || false,
-      is_backup: executor.is_backup || false,
+      
       order_index: index + 1,
       created_at: new Date(),
       updated_at: new Date(),
@@ -912,13 +1002,19 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
   let data = null;
   switch (stepNumber) {
     case 1:
-      data = await db.selectFrom('testators').selectAll().where('will_id', '=', willId).executeTakeFirst();
+      const testator = await db.selectFrom('testators').selectAll().where('will_id', '=', willId).executeTakeFirst();
+      // Include jurisdiction and marital_status from will
+      data = { 
+        ...testator, 
+        jurisdiction: will.jurisdiction,
+        marital_status: testator?.marital_status || will.marital_status 
+      };
       break;
-    case 2:
-      data = await db.selectFrom('spouses').selectAll().where('will_id', '=', willId).executeTakeFirst();
-      break;
-    case 3:
+    case 2: // Executors (swapped - was step 3)
       data = { executors: await db.selectFrom('executors').selectAll().where('will_id', '=', willId).orderBy('order_index').execute() };
+      break;
+    case 3: // Spouse (swapped - was step 2)
+      data = await db.selectFrom('spouses').selectAll().where('will_id', '=', willId).executeTakeFirst();
       break;
     case 4:
       data = { children: await db.selectFrom('children').selectAll().where('will_id', '=', willId).execute() };

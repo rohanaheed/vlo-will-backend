@@ -117,6 +117,397 @@ npm run dev
 
 ---
 
+## Complete API Flow Guide
+
+This section explains the complete flow from user registration to will completion with real API examples.
+
+### Flow Overview
+
+```
+1. User registers/logs in
+2. User clicks "Start Document" → Create Will API
+3. User fills Step 1 (Testator) → Save Step API
+4. User fills Step 2 (Executors) → Save Step API (with array)
+5. User fills Step 3 (Spouse) → Save Step API
+6. ... continue all steps ...
+7. User pays → Payment API + Unlock API
+8. Will is locked, user can download PDF
+```
+
+---
+
+### Step 1: Register & Login
+
+**Register:**
+```bash
+POST /api/v1/auth/register
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "password": "SecurePass123!",
+  "first_name": "John",
+  "last_name": "Doe"
+}
+```
+
+**Login:**
+```bash
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "user": { "id": "...", "email": "john@example.com" },
+    "tokens": {
+      "accessToken": "eyJhbGc...",
+      "refreshToken": "eyJhbGc..."
+    }
+  }
+}
+```
+
+> Save `accessToken` - use it in all subsequent requests as `Authorization: Bearer {token}`
+
+---
+
+### Step 2: Create Will (Start Document)
+
+When user clicks **"Start Document"** button, they first select the will type:
+
+```bash
+POST /api/v1/wills
+Content-Type: application/json
+Authorization: Bearer {token}
+
+{
+  "will_type": "general"
+}
+```
+
+> **Note:** `will_type` can be `"general"` or `"islamic"`. This determines the number of steps (12 vs 16).
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "will": {
+      "id": "e32ab0b4-2c90-4d12-bf6b-d8ca624c3ed5",
+      "will_type": "general",
+      "status": "draft",
+      "current_step": 1
+    }
+  }
+}
+```
+
+> Save `will.id` - use it for all step operations
+
+**Flow:**
+1. User clicks "Start Document"
+2. User selects will type (General / Islamic)
+3. API creates will → returns `will.id`
+4. Redirect to Step 1 form
+5. **Marital status is collected in Step 1** (Testator form)
+
+---
+
+### Step 3: Fill Form Steps
+
+#### Step 1 - Testator (Your Details)
+
+```bash
+PUT /api/v1/wills/{willId}/steps/1
+Content-Type: application/json
+Authorization: Bearer {token}
+
+{
+  "data": {
+    "title": "Mr",
+    "full_name": "John Alexander Smith",
+    "known_as": null,
+    "gender": "male",
+    "building_number": "1568",
+    "building_name": "Sky Land",
+    "street": "Wood Street",
+    "town": "Leyton",
+    "city": "London",
+    "county": "London",
+    "postcode": "E10 5AB",
+    "country": "United Kingdom",
+    "national_insurance_number": "AB123456C",
+    "date_of_birth": "1990-01-15",
+    "phone_country_code": "+44",
+    "phone": "7890123456",
+    "email": "john@example.com",
+    "marital_status": "married",
+    "include_future_marriage_clause": false,
+    "declaration_confirmed": true,
+    "jurisdiction": "england"
+  },
+  "action": "save_and_continue"
+}
+```
+
+---
+
+#### Step 2 - Executors (Multiple Items with Add Button)
+
+When user adds multiple executors using **"+ Add"** button, send as array:
+
+```bash
+PUT /api/v1/wills/{willId}/steps/2
+Content-Type: application/json
+Authorization: Bearer {token}
+
+{
+  "data": {
+    "executors": [
+      {
+        "executor_type": "individual",
+        "title": "Mr",
+        "full_name": "Robert Wilson",
+        "relationship_to_testator": "spouse",
+        "phone_country_code": "+44",
+        "phone": "7890123456",
+        "email": "robert@example.com",
+        "is_alternate": false,
+        "is_backup": false
+      },
+      {
+        "executor_type": "individual",
+        "title": "Mrs",
+        "full_name": "Sarah Johnson",
+        "relationship_to_testator": "sister",
+        "phone_country_code": "+44",
+        "phone": "7890654321",
+        "email": "sarah@example.com",
+        "is_alternate": true,
+        "is_backup": false
+      },
+      {
+        "executor_type": "professional",
+        "business_name": "Wilson & Co. Solicitors",
+        "role_title": "solicitor",
+        "phone_country_code": "+44",
+        "phone": "2071234567",
+        "email": "legal@wilsonsolicitors.co.uk",
+        "is_alternate": false,
+        "is_backup": true
+      }
+    ]
+  },
+  "action": "save_and_continue"
+}
+```
+
+**Key Points for Arrays:**
+- Each **"+ Add"** click adds a new object to the array
+- **"× Remove"** click removes that object from array
+- Send the ENTIRE array on save (backend replaces all)
+- `order_index` is auto-assigned based on array position
+
+---
+
+#### Step 3 - Spouse
+
+```bash
+PUT /api/v1/wills/{willId}/steps/3
+Content-Type: application/json
+Authorization: Bearer {token}
+
+{
+  "data": {
+    "full_name": "Jane Smith",
+    "is_same_address": true,
+    "address_line_1": "1568 Sky Land, Wood Street",
+    "city": "London",
+    "county": "London",
+    "postcode": "E10 5AB",
+    "country": "United Kingdom"
+  },
+  "action": "save_and_continue"
+}
+```
+
+---
+
+#### Step 4 - Children (Multiple Items)
+
+```bash
+PUT /api/v1/wills/{willId}/steps/4
+Content-Type: application/json
+Authorization: Bearer {token}
+
+{
+  "data": {
+    "children": [
+      {
+        "full_name": "Emma Smith",
+        "date_of_birth": "2015-03-20",
+        "is_minor": true,
+        "is_dependent": true
+      },
+      {
+        "full_name": "James Smith",
+        "date_of_birth": "2010-07-15",
+        "is_minor": true,
+        "is_dependent": true
+      }
+    ]
+  },
+  "action": "save_and_continue"
+}
+```
+
+---
+
+#### Step 5 - Guardians (Multiple Items)
+
+```bash
+PUT /api/v1/wills/{willId}/steps/5
+Content-Type: application/json
+Authorization: Bearer {token}
+
+{
+  "data": {
+    "guardians": [
+      {
+        "full_name": "Michael Brown",
+        "relationship_to_testator": "brother",
+        "address_line_1": "45 Oak Avenue",
+        "city": "Manchester",
+        "postcode": "M1 2AB",
+        "country": "United Kingdom",
+        "is_substitute": false
+      },
+      {
+        "full_name": "Lisa Brown",
+        "relationship_to_testator": "sister_in_law",
+        "address_line_1": "45 Oak Avenue",
+        "city": "Manchester",
+        "postcode": "M1 2AB",
+        "country": "United Kingdom",
+        "is_substitute": true
+      }
+    ]
+  },
+  "action": "save_and_continue"
+}
+```
+
+---
+
+### Navigation Actions
+
+| Action | When to Use | Behavior |
+|--------|-------------|----------|
+| `save_and_continue` | User clicks "Save and Continue" | Saves data, moves to next step |
+| `save` | Auto-save / draft save | Saves data, stays on same step |
+| `save_and_back` | User clicks "Back" after editing | Saves data, moves to previous step |
+
+---
+
+### Get Step Data (Load Existing Data)
+
+When user returns to a step or refreshes page:
+
+```bash
+GET /api/v1/wills/{willId}/steps/2
+Authorization: Bearer {token}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "step": 2,
+    "status": "completed",
+    "can_edit": true,
+    "locked_reason": null,
+    "data": {
+      "executors": [
+        {
+          "id": "abc-123",
+          "executor_type": "individual",
+          "full_name": "Robert Wilson",
+          ...
+        }
+      ]
+    },
+    "will_info": {
+      "current_step": 5,
+      "highest_completed_step": 4,
+      "is_paid": false
+    }
+  }
+}
+```
+
+---
+
+### Get All Steps Status (Progress Bar)
+
+For rendering the progress bar with step states:
+
+```bash
+GET /api/v1/wills/{willId}/steps
+Authorization: Bearer {token}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "steps": [
+      { "step": 1, "status": "completed", "can_edit": true },
+      { "step": 2, "status": "completed", "can_edit": true },
+      { "step": 3, "status": "completed", "can_edit": true },
+      { "step": 4, "status": "current", "can_edit": true },
+      { "step": 5, "status": "upcoming", "can_edit": false },
+      ...
+    ],
+    "will_info": {
+      "total_steps": 12,
+      "is_paid": false
+    }
+  }
+}
+```
+
+---
+
+### After Payment - Locking Flow
+
+**Before Payment:** User can freely edit any completed step
+
+**After Payment:**
+```bash
+POST /api/v1/wills/{willId}/unlock
+Content-Type: application/json
+Authorization: Bearer {token}
+
+{
+  "payment_id": "pi_stripe_payment_id"
+}
+```
+
+After this, all steps become `locked`. To edit again, user must pay again.
+
+---
+
 ## Multi-Step Form Flow
 
 ### Will Types & Steps
@@ -126,8 +517,8 @@ npm run dev
 | Step | Name | Description |
 |------|------|-------------|
 | 1 | Testator | Personal details of the will maker |
-| 2 | Spouse | Spouse/partner information (if married) |
-| 3 | Executors | People who will execute the will |
+| 2 | Executors | People who will execute the will |
+| 3 | Spouse | Spouse/partner information (if married) |
 | 4 | Children | Children information |
 | 5 | Guardians | Guardians for minor children |
 | 6 | Inheritance Age | Age at which beneficiaries inherit |
@@ -151,9 +542,10 @@ npm run dev
 
 | Status | Description | Can Edit |
 |--------|-------------|----------|
-| `locked` | Step completed, view only | No |
+| `completed` | Step done (before payment) | Yes |
 | `current` | Current step to fill | Yes |
 | `upcoming` | Future step, not yet accessible | No |
+| `locked` | Paid but not unlocked | No |
 | `editable` | Paid and unlocked for editing | Yes |
 
 ### Step Locking Logic
@@ -163,20 +555,21 @@ npm run dev
 │                      WILL LIFECYCLE                              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  1. DRAFT / IN-PROGRESS                                         │
+│  1. BEFORE PAYMENT (DRAFT / IN-PROGRESS)                        │
 │     ├── User fills step 1 → clicks "Save & Continue"            │
-│     ├── Step 1 becomes LOCKED (view only)                       │
 │     ├── User moves to step 2                                    │
+│     ├── User can GO BACK to step 1 and EDIT freely              │
+│     ├── No locking before payment!                              │
 │     ├── Repeat until all steps completed                        │
 │     └── Will status → COMPLETED                                 │
 │                                                                  │
-│  2. COMPLETED (LOCKED)                                          │
-│     ├── All steps are locked (view only)                        │
-│     ├── User must PAY to edit                                   │
-│     └── Payment unlocks all steps for editing                   │
-│                                                                  │
-│  3. PAID (UNLOCKED)                                             │
+│  2. AFTER PAYMENT (LOCKED)                                      │
 │     ├── is_paid = true                                          │
+│     ├── All steps are LOCKED (view only)                        │
+│     ├── User cannot edit any step                               │
+│     └── Must pay again to unlock for editing                    │
+│                                                                  │
+│  3. PAID TO EDIT (UNLOCKED)                                     │
 │     ├── edit_unlocked = true                                    │
 │     ├── User can edit ANY step                                  │
 │     └── On save → edit_unlocked = false (locked again)          │

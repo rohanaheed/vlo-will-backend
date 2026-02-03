@@ -23,7 +23,8 @@ const getWillByIdSchema = {
 const createWillSchema = {
   body: z.object({
     will_type: z.enum(Object.values(WILL_TYPES)),
-    marital_status: z.enum(Object.values(MARITAL_STATUSES)),
+    // marital_status is collected in Step 1 (Testator form), not on will creation
+    marital_status: z.enum(Object.values(MARITAL_STATUSES)).optional(),
     is_for_self: z.boolean().default(true),
     not_for_self_explanation: z.string().max(1000).optional().nullable(),
   }),

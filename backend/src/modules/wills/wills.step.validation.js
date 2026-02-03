@@ -2,24 +2,61 @@ const { z } = require('zod');
 
 const uuidSchema = z.string().uuid('Invalid ID format');
 
-// Step 1: Testator
+// Step 1: Testator (Updated to match Figma)
 const step1Schema = z.object({
+  // Personal Details
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
   full_name: z.string().max(255).optional().nullable(),
-  first_name: z.string().max(100).optional().nullable(),
-  middle_name: z.string().max(100).optional().nullable(),
-  last_name: z.string().max(100).optional().nullable(),
-  date_of_birth: z.string().optional().nullable(),
-  father_name: z.string().max(255).optional().nullable(),
-  husband_name: z.string().max(255).optional().nullable(),
-  address_line_1: z.string().max(255).optional().nullable(),
-  address_line_2: z.string().max(255).optional().nullable(),
+  known_as: z.string().max(255).optional().nullable(), // "Known by any other name"
+  gender: z.enum(['male', 'female', 'trans', 'other']).optional().nullable(),
+  
+  // Address Details
+  building_number: z.string().max(50).optional().nullable(),
+  building_name: z.string().max(100).optional().nullable(),
+  street: z.string().max(255).optional().nullable(),
+  town: z.string().max(100).optional().nullable(),
   city: z.string().max(100).optional().nullable(),
   county: z.string().max(100).optional().nullable(),
   postcode: z.string().max(20).optional().nullable(),
   country: z.string().max(100).optional().nullable(),
-  has_property_abroad: z.boolean().optional().nullable(),
-  national_id: z.string().max(100).optional().nullable(),
-  passport_number: z.string().max(100).optional().nullable(),
+  
+  // Identification
+  national_insurance_number: z.string().max(20).optional().nullable(),
+  date_of_birth: z.string().optional().nullable(),
+  
+  // Contact
+  phone_country_code: z.string().max(10).optional().nullable(), // e.g., "+44"
+  phone: z.string().max(30).optional().nullable(),
+  email: z.string().email().max(255).optional().nullable(),
+  
+  // Marital Status & Legal
+  marital_status: z.enum([
+    'single', 
+    'married', 
+    'divorced', 
+    'widowed', 
+    'civil_partner', 
+    'previously_married', 
+    'separated', 
+    'living_as_partners'
+  ]).optional().nullable(),
+  include_future_marriage_clause: z.boolean().optional().nullable(), // Keep will valid after marriage
+  declaration_confirmed: z.boolean().optional().nullable(), // Over 18, sound mind checkbox
+  
+  // Jurisdiction (stored on wills table)
+  jurisdiction: z.enum([
+    'england',
+    'wales', 
+    'scotland',
+    'northern_ireland'
+  ]).optional().nullable(),
+  
+  // Legacy fields (keep for backward compatibility)
+  first_name: z.string().max(100).optional().nullable(),
+  middle_name: z.string().max(100).optional().nullable(),
+  last_name: z.string().max(100).optional().nullable(),
+  address_line_1: z.string().max(255).optional().nullable(),
+  address_line_2: z.string().max(255).optional().nullable(),
 }).passthrough();
 
 // Step 2: Spouse
@@ -34,21 +71,55 @@ const step2Schema = z.object({
   is_same_address: z.boolean().optional().nullable(),
 }).passthrough();
 
-// Step 3: Executors
+// Step 3: Executors (Updated to match Figma)
 const executorSchema = z.object({
   id: z.string().optional().nullable(),
-  full_name: z.string().min(1).max(255),
+  
+  // Executor type: individual or professional advisor
+  executor_type: z.enum(['individual', 'professional']).optional().default('individual'),
+  
+  // For Individual executors
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  full_name: z.string().max(255).optional().nullable(),
+  relationship_to_testator: z.enum([
+    'spouse',
+    'civil_partner',
+    'long_term_partner',
+    'brother',
+    'sister',
+    'friend',
+    'parent',
+    'child',
+    'other'
+  ]).optional().nullable(),
+  
+  // For Professional Advisor executors
+  business_name: z.string().max(255).optional().nullable(),
+  role_title: z.enum([
+    'solicitor',
+    'accountant',
+    'manager',
+    'financial_advisor',
+    'other'
+  ]).optional().nullable(),
+  
+  // Contact details (shared)
+  phone_country_code: z.string().max(10).optional().nullable(),
+  phone: z.string().max(30).optional().nullable(),
+  email: z.string().email().max(255).optional().nullable(),
+  
+  // Executor role flags
+  is_alternate: z.boolean().optional().default(false), // Alternate Executor
+  is_backup: z.boolean().optional().default(false),    // Backup Executor
+  is_spouse: z.boolean().optional().default(false),    // Is this the spouse
+  
+  // Legacy address fields (keep for compatibility)
   address_line_1: z.string().max(255).optional().nullable(),
   address_line_2: z.string().max(255).optional().nullable(),
   city: z.string().max(100).optional().nullable(),
   county: z.string().max(100).optional().nullable(),
   postcode: z.string().max(20).optional().nullable(),
   country: z.string().max(100).optional().nullable(),
-  relationship_to_testator: z.string().max(100).optional().nullable(),
-  email: z.string().email().optional().nullable(),
-  phone: z.string().max(20).optional().nullable(),
-  is_spouse: z.boolean().optional().default(false),
-  is_backup: z.boolean().optional().default(false),
 }).passthrough();
 
 const step3Schema = z.object({
@@ -246,10 +317,11 @@ const step16Schema = z.object({
 }).passthrough();
 
 // Map step numbers to their schemas
+// Step 2 = Executors, Step 3 = Spouse (swapped)
 const stepSchemas = {
   1: step1Schema,
-  2: step2Schema,
-  3: step3Schema,
+  2: step3Schema,  // Executors (was step 3)
+  3: step2Schema,  // Spouse (was step 2)
   4: step4Schema,
   5: step5Schema,
   6: step6Schema,
