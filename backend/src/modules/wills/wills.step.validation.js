@@ -59,18 +59,6 @@ const step1Schema = z.object({
   address_line_2: z.string().max(255).optional().nullable(),
 }).passthrough();
 
-// Step 2: Spouse
-const step2Schema = z.object({
-  full_name: z.string().max(255).optional().nullable(),
-  address_line_1: z.string().max(255).optional().nullable(),
-  address_line_2: z.string().max(255).optional().nullable(),
-  city: z.string().max(100).optional().nullable(),
-  county: z.string().max(100).optional().nullable(),
-  postcode: z.string().max(20).optional().nullable(),
-  country: z.string().max(100).optional().nullable(),
-  is_same_address: z.boolean().optional().nullable(),
-}).passthrough();
-
 // Step 3: Executors (Updated to match Figma)
 const executorSchema = z.object({
   id: z.string().optional().nullable(),
@@ -116,6 +104,8 @@ const executorSchema = z.object({
   // Legacy address fields (keep for compatibility)
   address_line_1: z.string().max(255).optional().nullable(),
   address_line_2: z.string().max(255).optional().nullable(),
+  building_number: z.string().max(50).optional().nullable(),
+  building_name: z.string().max(100).optional().nullable(),
   city: z.string().max(100).optional().nullable(),
   county: z.string().max(100).optional().nullable(),
   postcode: z.string().max(20).optional().nullable(),
@@ -125,6 +115,27 @@ const executorSchema = z.object({
 const step3Schema = z.object({
   executors: z.array(executorSchema).optional().default([]),
 }).passthrough();
+
+// Step 2: Spouse
+const step2Schema = z.object({
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  full_name: z.string().max(255).optional().nullable(),
+  building_number: z.string().max(50).optional().nullable(),
+  building_name: z.string().max(100).optional().nullable(),
+  address_line_1: z.string().max(255).optional().nullable(),
+  address_line_2: z.string().max(255).optional().nullable(),
+  city: z.string().max(100).optional().nullable(),
+  county: z.string().max(100).optional().nullable(),
+  postcode: z.string().max(20).optional().nullable(),
+  country: z.string().max(100).optional().nullable(),
+  phone_country_code: z.string().max(10).optional().nullable(),
+  phone: z.string().max(30).optional().nullable(),
+  date_of_birth: z.string().optional().nullable(),
+  relationship_to_testator: z.string().max(100).optional().nullable(),
+  is_same_address: z.boolean().optional().nullable(),
+  is_spouse: z.boolean().optional().default(false)
+}).passthrough();
+
 
 // Step 4: Children
 const childSchema = z.object({
@@ -350,7 +361,7 @@ const saveStepSchema = {
   }),
   body: z.object({
     data: z.object({}).passthrough().optional(),
-    action: z.enum(['save', 'save_and_continue', 'save_and_back']).optional(),
+    action: z.enum(['save', 'save_and_continue', 'save_and_back', 'skip_and_continue']).optional(),
   }).passthrough(),
 };
 

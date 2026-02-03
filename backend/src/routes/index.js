@@ -8,6 +8,7 @@ const permissionsRoutes = require('../modules/permissions/permissions.routes');
 const willsRoutes = require('../modules/wills/wills.routes');
 const testatorsRoutes = require('../modules/testators/testators.routes');
 const executorsRoutes = require('../modules/executors/executors.routes');
+const spousesRoutes = require('../modules/spouses/spouses.routes');
 
 const router = express.Router();
 
@@ -64,6 +65,7 @@ router.use(`${API_PREFIX}/wills`, willsRoutes);
 // Legacy individual endpoints (still available for granular operations)
 router.use(`${API_PREFIX}/wills/:willId/testator`, testatorsRoutes);
 router.use(`${API_PREFIX}/wills/:willId/executors`, executorsRoutes);
+router.use(`${API_PREFIX}/wills/:willId/spouse`, spousesRoutes);
 
 // Admin routes
 // router.use(`${API_PREFIX}/admin`, adminRoutes);

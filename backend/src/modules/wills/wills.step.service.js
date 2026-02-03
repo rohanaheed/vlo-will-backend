@@ -148,7 +148,7 @@ const getStepStatus = (will, stepNumber) => {
  * @param {object} stepData - Data for this step
  * @param {string} userId - User ID
  * @param {string} userRole - User role
- * @param {object} options - { action: 'save' | 'save_and_continue' | 'save_and_back' }
+ * @param {object} options - { action: 'save' | 'save_and_continue' | 'save_and_back' | 'skip_and_continue' }
  */
 const saveStepData = async (willId, stepNumber, stepData, userId, userRole, options = {}) => {
   const { action = 'save_and_continue' } = options;
@@ -173,8 +173,10 @@ const saveStepData = async (willId, stepNumber, stepData, userId, userRole, opti
 
   // Use transaction to ensure atomicity
   const result = await db.transaction().execute(async (trx) => {
-    // Save step-specific data
-    await saveStepSpecificData(trx, willId, stepNumber, stepData, will);
+    // Save step-specific data unless skipping
+    if (action !== 'skip_and_continue') {
+      await saveStepSpecificData(trx, willId, stepNumber, stepData, will);
+    }
 
     // Calculate new values
     let newCurrentStep = will.current_step;
@@ -182,7 +184,7 @@ const saveStepData = async (willId, stepNumber, stepData, userId, userRole, opti
     let newEditUnlocked = will.edit_unlocked;
     let newStatus = will.status;
     
-    if (action === 'save_and_continue') {
+    if (action === 'save_and_continue' || action === 'skip_and_continue') {
       // Advance current step
       newCurrentStep = Math.min(stepNumber + 1, maxSteps);
       
@@ -414,7 +416,10 @@ const upsertTestator = async (trx, willId, data) => {
       .execute();
   }
 
-  // Also save marital_status to testators table for reference
+  // Also save jurisdiction and marital_status to testators table for reference
+  if (jurisdiction) {
+    testatorData.jurisdiction = jurisdiction;
+  }
   if (marital_status) {
     testatorData.marital_status = marital_status;
   }
@@ -445,11 +450,76 @@ const upsertTestator = async (trx, willId, data) => {
         updated_at: new Date(),
       })
       .execute();
-  }
-};
+    }
+  };
 
 /**
- * Upsert spouse (Step 2)
+ * Save executors (Step 3)
+ * Handles array of executors with full replace strategy
+ * Supports both Individual and Professional Advisor executors
+ */
+
+  const saveExecutors = async (trx, willId, data) => {
+    if (!data || !data.executors) return;
+  
+    const { executors } = data;
+  
+    // Delete existing executors
+    await trx
+      .deleteFrom('executors')
+      .where('will_id', '=', willId)
+      .execute();
+  
+    // Insert new executors
+    if (executors.length > 0) {
+      const executorRecords = executors.map((executor, index) => ({
+        id: executor.id || generateUUID(),
+        will_id: willId,
+        
+        // Executor type
+        executor_type: executor.executor_type || 'individual',
+        
+        // Individual fields
+        title: executor.title,
+        full_name: executor.full_name,
+        relationship_to_testator: executor.relationship_to_testator,
+        
+        // Professional advisor fields
+        business_name: executor.business_name,
+        role_title: executor.role_title,
+        
+        // Contact details
+        phone_country_code: executor.phone_country_code,
+        phone: executor.phone,
+        email: executor.email,
+        
+        // Executor role flags
+        is_alternate: executor.is_alternate || false,
+        is_backup: executor.is_backup || false,
+        is_spouse: executor.is_spouse || false,
+        
+        // Legacy address fields
+        address_line_1: executor.address_line_1,
+        address_line_2: executor.address_line_2,
+        city: executor.city,
+        county: executor.county,
+        postcode: executor.postcode,
+        country: executor.country,
+        
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      }));
+  
+      await trx
+        .insertInto('executors')
+        .values(executorRecords)
+        .execute();
+    }
+  };
+
+/**
+ * Upsert spouse (Step 3)
  */
 const upsertSpouse = async (trx, willId, data) => {
   if (!data || Object.keys(data).length === 0) return;
@@ -476,70 +546,6 @@ const upsertSpouse = async (trx, willId, data) => {
         created_at: new Date(),
         updated_at: new Date(),
       })
-      .execute();
-  }
-};
-
-/**
- * Save executors (Step 3)
- * Handles array of executors with full replace strategy
- * Supports both Individual and Professional Advisor executors
- */
-const saveExecutors = async (trx, willId, data) => {
-  if (!data || !data.executors) return;
-
-  const { executors } = data;
-
-  // Delete existing executors
-  await trx
-    .deleteFrom('executors')
-    .where('will_id', '=', willId)
-    .execute();
-
-  // Insert new executors
-  if (executors.length > 0) {
-    const executorRecords = executors.map((executor, index) => ({
-      id: executor.id || generateUUID(),
-      will_id: willId,
-      
-      // Executor type
-      executor_type: executor.executor_type || 'individual',
-      
-      // Individual fields
-      title: executor.title,
-      full_name: executor.full_name,
-      relationship_to_testator: executor.relationship_to_testator,
-      
-      // Professional advisor fields
-      business_name: executor.business_name,
-      role_title: executor.role_title,
-      
-      // Contact details
-      phone_country_code: executor.phone_country_code,
-      phone: executor.phone,
-      email: executor.email,
-      
-      // Executor role flags
-      is_alternate: executor.is_alternate || false,
-      is_backup: executor.is_backup || false,
-      is_spouse: executor.is_spouse || false,
-      
-      // Legacy address fields
-      address_line_1: executor.address_line_1,
-      address_line_2: executor.address_line_2,
-      city: executor.city,
-      county: executor.county,
-      postcode: executor.postcode,
-      country: executor.country,
-      
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }));
-
-    await trx
-      .insertInto('executors')
-      .values(executorRecords)
       .execute();
   }
 };
@@ -1006,8 +1012,8 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
       // Include jurisdiction and marital_status from will
       data = { 
         ...testator, 
-        jurisdiction: will.jurisdiction,
-        marital_status: testator?.marital_status || will.marital_status 
+        jurisdiction: testator?.jurisdiction || will.jurisdiction,
+        marital_status: testator?.marital_status || will.marital_status,
       };
       break;
     case 2: // Executors (swapped - was step 3)

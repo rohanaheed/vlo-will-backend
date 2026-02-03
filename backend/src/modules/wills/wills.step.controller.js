@@ -12,7 +12,7 @@ const { AUDIT_ACTIONS } = require('../../utils/constants');
  * Request body:
  * {
  *   "data": { ... step-specific data ... },
- *   "action": "save" | "save_and_continue" | "save_and_back"
+ *   "action": "save" | "save_and_continue" | "save_and_back" | "skip_and_continue"
  * }
  * 
  * Response:

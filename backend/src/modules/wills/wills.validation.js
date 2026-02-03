@@ -27,7 +27,13 @@ const createWillSchema = {
     marital_status: z.enum(Object.values(MARITAL_STATUSES)).optional(),
     is_for_self: z.boolean().default(true),
     not_for_self_explanation: z.string().max(1000).optional().nullable(),
-  }),
+    jurisdiction: z.enum([
+        'england',
+        'wales', 
+        'scotland',
+        'northern_ireland'
+      ]).optional().nullable()
+  })
 };
 
 const updateWillSchema = {

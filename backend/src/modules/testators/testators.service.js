@@ -26,6 +26,8 @@ const upsertTestator = async (willId, testatorData, userId, userRole) => {
   // Verify will access
   await willsService.getWillById(willId, userId, userRole);
 
+  const testatorRowData = testatorData || {};
+
   // Check if testator exists
   const existingTestator = await db
     .selectFrom('testators')
@@ -40,7 +42,7 @@ const upsertTestator = async (willId, testatorData, userId, userRole) => {
     testator = await db
       .updateTable('testators')
       .set({
-        ...testatorData,
+        ...testatorRowData,
         updated_at: new Date(),
       })
       .where('id', '=', existingTestator.id)
@@ -56,7 +58,7 @@ const upsertTestator = async (willId, testatorData, userId, userRole) => {
       .values({
         id: testatorId,
         will_id: willId,
-        ...testatorData,
+        ...testatorRowData,
         created_at: new Date(),
         updated_at: new Date(),
       })
@@ -66,10 +68,22 @@ const upsertTestator = async (willId, testatorData, userId, userRole) => {
     logger.info('Testator created', { testatorId, willId });
   }
 
-  // Update will's updated_at
+  // Update will fields if provided (jurisdiction and/or marital_status)
+  const willUpdates = {
+    updated_at: new Date(),
+  };
+
+  if (testatorRowData?.jurisdiction) {
+    willUpdates.jurisdiction = testatorRowData.jurisdiction;
+  }
+  if (testatorRowData?.marital_status) {
+    willUpdates.marital_status = testatorRowData.marital_status;
+  }
+
+  // Update will's updated_at (and any provided fields)
   await db
     .updateTable('wills')
-    .set({ updated_at: new Date() })
+    .set(willUpdates)
     .where('id', '=', willId)
     .execute();
 
