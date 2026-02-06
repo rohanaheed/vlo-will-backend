@@ -9,6 +9,7 @@ const willsRoutes = require('../modules/wills/wills.routes');
 const testatorsRoutes = require('../modules/testators/testators.routes');
 const executorsRoutes = require('../modules/executors/executors.routes');
 const spousesRoutes = require('../modules/spouses/spouses.routes');
+const beneficiariesRoutes = require('../modules/beneficiaries/beneficiaries.routes');
 
 const router = express.Router();
 
@@ -52,20 +53,13 @@ router.use(`${API_PREFIX}/roles`, rolesRoutes);
 // Permissions routes
 router.use(`${API_PREFIX}/permissions`, permissionsRoutes);
 
-// Wills routes (includes unified step endpoints)
-// 
-// RECOMMENDED: Use unified step endpoints for multi-step form:
-//   GET  /api/v1/wills/:id/steps/:stepNumber  - Get step data
-//   PUT  /api/v1/wills/:id/steps/:stepNumber  - Save step data + auto-advance
-//
-// This reduces API calls from 2 (save data + update step) to 1
-//
 router.use(`${API_PREFIX}/wills`, willsRoutes);
 
 // Legacy individual endpoints (still available for granular operations)
 router.use(`${API_PREFIX}/wills/:willId/testator`, testatorsRoutes);
 router.use(`${API_PREFIX}/wills/:willId/executors`, executorsRoutes);
 router.use(`${API_PREFIX}/wills/:willId/spouse`, spousesRoutes);
+router.use(`${API_PREFIX}/wills/:willId/beneficiaries`, beneficiariesRoutes);
 
 // Admin routes
 // router.use(`${API_PREFIX}/admin`, adminRoutes);

@@ -3,91 +3,95 @@ const { generateUUID } = require('../../utils/helpers');
 const willsService = require('../wills/wills.service');
 const logger = require('../../utils/logger');
 
-/**
- * Get testator for a will
- */
+// Get testator for a will
 const getTestator = async (willId, userId, userRole) => {
-  // Verify will access
   await willsService.getWillById(willId, userId, userRole);
 
-  const testator = await db
+  return db
     .selectFrom('testators')
     .selectAll()
     .where('will_id', '=', willId)
     .executeTakeFirst();
-
-  return testator;
 };
 
-/**
- * Create or update testator
- */
-const upsertTestator = async (willId, testatorData, userId, userRole) => {
-  // Verify will access
+// Create or update testator
+const upsertTestator = async (willId, data, userId, userRole) => {
   await willsService.getWillById(willId, userId, userRole);
 
-  const testatorRowData = testatorData || {};
+  if (!data || Object.keys(data).length === 0) return null;
 
-  // Check if testator exists
-  const existingTestator = await db
-    .selectFrom('testators')
-    .select('id')
-    .where('will_id', '=', willId)
-    .executeTakeFirst();
+  const {
+    marital_status,
+    ...testatorData
+  } = data;
 
-  let testator;
+  return db.transaction().execute(async (trx) => {
+   // Update Will  
+    const willUpdate = {};
 
-  if (existingTestator) {
-    // Update existing
-    testator = await db
-      .updateTable('testators')
-      .set({
-        ...testatorRowData,
-        updated_at: new Date(),
-      })
-      .where('id', '=', existingTestator.id)
-      .returningAll()
+    if (marital_status !== undefined) {
+      willUpdate.marital_status = marital_status;
+      testatorData.marital_status = marital_status;
+    }
+
+    if (Object.keys(willUpdate).length > 0) {
+      await trx
+        .updateTable('wills')
+        .set({
+          ...willUpdate,
+          updated_at: new Date(),
+        })
+        .where('id', '=', willId)
+        .execute();
+    }
+
+    // Create or update testator
+    const existing = await trx
+      .selectFrom('testators')
+      .select('id')
+      .where('will_id', '=', willId)
       .executeTakeFirst();
 
-    logger.info('Testator updated', { testatorId: existingTestator.id, willId });
-  } else {
-    // Create new
-    const testatorId = generateUUID();
-    testator = await db
-      .insertInto('testators')
-      .values({
-        id: testatorId,
-        will_id: willId,
-        ...testatorRowData,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .returningAll()
-      .executeTakeFirst();
+    let testator;
 
-    logger.info('Testator created', { testatorId, willId });
-  }
+    if (existing) {
+      testator = await trx
+        .updateTable('testators')
+        .set({
+          ...testatorData,
+          updated_at: new Date(),
+        })
+        .where('id', '=', existing.id)
+        .returningAll()
+        .executeTakeFirst();
 
-  // Update will fields if provided (jurisdiction and/or marital_status)
-  const willUpdates = {
-    updated_at: new Date(),
-  };
+      logger.info('Testator updated', {
+        testatorId: existing.id,
+        willId,
+      });
+    } else {
+      const testatorId = generateUUID();
 
-  if (testatorRowData?.jurisdiction) {
-    willUpdates.jurisdiction = testatorRowData.jurisdiction;
-  }
-  if (testatorRowData?.marital_status) {
-    willUpdates.marital_status = testatorRowData.marital_status;
-  }
+      testator = await trx
+        .insertInto('testators')
+        .values({
+          id: testatorId,
+          will_id: willId,
+          ...testatorData,
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .returningAll()
+        .executeTakeFirst();
 
-  // Update will's updated_at (and any provided fields)
-  await db
-    .updateTable('wills')
-    .set(willUpdates)
-    .where('id', '=', willId)
-    .execute();
+      logger.info('Testator created', {
+        testatorId,
+        willId,
+      });
+    }
 
-  return testator;
+    return testator;
+  });
 };
 
 module.exports = {

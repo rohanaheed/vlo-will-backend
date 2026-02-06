@@ -5,6 +5,18 @@ const willsService = require('../wills/wills.service');
 const logger = require('../../utils/logger');
 
 /**
+ * IMPORTANT: Executor data management during will flow
+ * 
+ * When saving will step data (Step 2 or 3):
+ * - DO NOT use this service directly
+ * - Use wills.step.service.js → saveExecutors() instead
+ * - The step service handles executor CRUD in a transaction with "replace all" strategy
+ * 
+ * This service is for direct executor CRUD operations outside the will step flow
+ * (e.g., API endpoints for managing executors independently)
+ */
+
+/**
  * Get all executors for a will
  */
 const getExecutors = async (willId, userId, userRole) => {

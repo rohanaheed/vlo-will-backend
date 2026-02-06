@@ -24,6 +24,11 @@ const MARITAL_STATUSES = {
   SINGLE: 'single',
   MARRIED: 'married',
   CIVIL_PARTNER: 'civil_partner',
+  PREVIOUSLY_MARRIED: 'previously_married',
+  DIVORCED: 'divorced',
+  WIDOWED: 'widowed',
+  SEPARATED: 'separated',
+  LIVING_AS_PARTNER: 'living_partner'
 };
 
 // Asset Types
@@ -113,6 +118,8 @@ const RELATIONSHIPS = [
   'cousin',
   'friend',
   'partner',
+  'parent',
+  'child',
   'stepson',
   'stepdaughter',
   'stepfather',
@@ -125,8 +132,10 @@ const RELATIONSHIPS = [
   'daughter_in_law',
   'brother_in_law',
   'sister_in_law',
-  'godchild',
   'legal_guardian',
+  'civil_partner', 
+  'long_term_partner',
+  'adopted_child',
   'other',
 ];
 
@@ -134,42 +143,37 @@ const RELATIONSHIPS = [
 const WILL_STEPS = {
   GENERAL: {
     YOUR_DETAILS: 1,
-    SPOUSE: 2,
-    EXECUTORS: 3,
-    CHILDREN: 4,
-    GUARDIANS: 5,
-    INHERITANCE_AGE: 6,
+    EXECUTORS: 2,
+    SPOUSE: 3,
+    BENEFICIARIES: 4,
+    ASSESTS: 5,
+    LIABILITIES: 6,
     GIFTS: 7,
-    REMAINDER: 8,
-    TOTAL_FAILURE: 9,
-    PETS: 10,
-    ADDITIONAL: 11,
-    SIGNING: 12,
+    RESIDUAL: 8,
+    FUNERAL: 9,
+    WITNESSES: 10,
+    SIGNING: 11
   },
   ISLAMIC: {
     YOUR_DETAILS: 1,
-    SPOUSE: 2,
+    FAITH: 2,
     EXECUTORS: 3,
-    CHILDREN: 4,
-    GUARDIANS: 5,
-    INHERITANCE_AGE: 6,
-    GIFTS: 7,
-    REMAINDER: 8,
-    TOTAL_FAILURE: 9,
-    PETS: 10,
-    ADDITIONAL: 11,
-    SIGNING: 12,
-    SCHOOL_OF_THOUGHT: 13,
-    RELIGIOUS_OBLIGATIONS: 14,
-    CHARITABLE_BEQUESTS: 15,
-    HEIRS: 16,
-  },
+    SPOUSE: 4,
+    BENEFICIARIES: 5,
+    ASSESTS: 6,
+    LIABILITIES: 7,
+    GIFTS: 8,
+    FUNERAL: 9,
+    DISTRIBUTION: 10,
+    WITNESSES: 11,
+    SIGNING: 12
+  }
 };
 
 // Total Step Counts
 const TOTAL_STEPS = {
-  GENERAL: 12,
-  ISLAMIC: 16,
+  GENERAL: 11,
+  ISLAMIC: 12
 };
 
 // Audit Actions

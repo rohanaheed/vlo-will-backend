@@ -1,26 +1,10 @@
-/**
- * Unified Step Service
- * Handles saving step data and auto-advancing in a single operation
- * 
- * STEP LOCKING LOGIC (Updated):
- * - BEFORE PAYMENT: User can freely edit ANY step (completed or current)
- *   - Can go back to previous steps, edit, save and continue
- *   - No locking before payment
- * - AFTER PAYMENT (is_paid=true): All steps are LOCKED
- *   - User must pay again to unlock for editing
- * - AFTER UNLOCK (is_paid=true, edit_unlocked=true): All steps are editable
- *   - After saving an edit, edit_unlocked becomes false (locked again)
- */
-
 const { db } = require('../../db');
 const { generateUUID } = require('../../utils/helpers');
 const { NotFoundError, BadRequestError, ForbiddenError } = require('../../utils/errors');
 const { WILL_STATUSES, WILL_TYPES, TOTAL_STEPS, ROLES } = require('../../utils/constants');
 const logger = require('../../utils/logger');
 
-/**
- * Get will with ownership check
- */
+// Get will with ownership check
 const getWillWithAccess = async (willId, userId, userRole) => {
   const will = await db
     .selectFrom('wills')
@@ -151,7 +135,7 @@ const getStepStatus = (will, stepNumber) => {
  * @param {object} options - { action: 'save' | 'save_and_continue' | 'save_and_back' | 'skip_and_continue' }
  */
 const saveStepData = async (willId, stepNumber, stepData, userId, userRole, options = {}) => {
-  const { action = 'save_and_continue' } = options;
+  const { action } = options;
 
   // Verify will access
   const will = await getWillWithAccess(willId, userId, userRole);
@@ -328,69 +312,101 @@ const unlockWillForEditing = async (willId, paymentId, userId, userRole) => {
  * Routes to appropriate table based on step number
  */
 const saveStepSpecificData = async (trx, willId, stepNumber, stepData, will) => {
+  const isIslamic = will.will_type === WILL_TYPES.ISLAMIC;
+
   switch (stepNumber) {
-    case 1: // Your Details (Testator)
+    case 1: // YOUR DETAILS
       await upsertTestator(trx, willId, stepData);
       break;
 
-    case 2: // Executors (swapped - was step 3)
-      await saveExecutors(trx, willId, stepData);
-      break;
-
-    case 3: // Spouse (swapped - was step 2)
-      if (will.marital_status !== 'single') {
-        await upsertSpouse(trx, willId, stepData);
+    case 2: // GENERAL: EXECUTORS | ISLAMIC: FAITH
+      if (isIslamic) {
+        await saveIslamicFaith(trx, willId, stepData);
+      } else {
+        await saveExecutors(trx, willId, stepData);
       }
       break;
 
-    case 4: // Children
-      await saveChildren(trx, willId, stepData);
+    case 3: // EXECUTORS (Islamic) | SPOUSE (General)
+      if (isIslamic) {
+        await saveExecutors(trx, willId, stepData);
+      } else {
+        await saveSpouse(trx, willId, stepData);
+      }
       break;
 
-    case 5: // Guardians
-      await saveGuardians(trx, willId, stepData);
+    case 4: // SPOUSE (Islamic) | BENEFICIARIES (General)
+      if (isIslamic) {
+        await saveSpouse(trx, willId, stepData);
+      } else {
+        await saveBeneficiary(trx, willId, stepData);
+      }
       break;
 
-    case 6: // Inheritance Age (stored in will's additional data or beneficiaries)
-      await saveInheritanceAge(trx, willId, stepData);
+    case 5: // BENEFICIARIES (Islamic) | ASSETS (General)
+      if (isIslamic) {
+        await saveBeneficiary(trx, willId, stepData);
+      } else {
+        await saveAssets(trx, willId, stepData);
+      }
       break;
 
-    case 7: // Gifts (Beneficiaries with specific gifts)
-      await saveBeneficiaries(trx, willId, stepData, false);
+    case 6: // ASSETS (Islamic) | LIABILITIES (General)
+      if (isIslamic) {
+        await saveAssets(trx, willId, stepData);
+      } else {
+        await saveDebts(trx, willId, stepData);
+      }
       break;
 
-    case 8: // Remainder of Estate
-      await saveBeneficiaries(trx, willId, stepData, true);
+    case 7: // LIABILITIES (Islamic) | GIFTS (General)
+      if (isIslamic) {
+        await saveDebts(trx, willId, stepData);
+      } else {
+        await saveGifts(trx, willId, stepData);
+      }
       break;
 
-    case 9: // Total Failure Clause
-      await saveTotalFailure(trx, willId, stepData);
+    case 8: // GIFTS (Islamic) | RESIDUAL (General)
+      if (isIslamic) {
+        await saveGifts(trx, willId, stepData);
+      } else {
+        await saveResidual(trx, willId, stepData);
+      }
       break;
 
-    case 10: // Pets
-      await savePets(trx, willId, stepData);
+    case 9: // FUNERAL
+      await saveFuneral(trx, willId, stepData);
       break;
 
-    case 11: // Additional Instructions
-      await saveAdditionalClauses(trx, willId, stepData);
+    case 10: // GENERAL: WITNESSES | ISLAMIC: DISTRIBUTION
+      if (isIslamic) {
+        await saveIslamicDistribution(trx, willId, stepData);
+      } else {
+        await saveWitnesses(trx, willId, stepData);
+      }
       break;
 
-    case 12: // Signing Details
+    case 11: // GENERAL: SIGNING | ISLAMIC: WITNESSES
+      if (isIslamic) {
+        await saveWitnesses(trx, willId, stepData);
+      } else {
+        await saveSigningDetails(trx, willId, stepData);
+      }
+      break;
+
+    case 12: // SIGNING (Islamic only)
+      if (!isIslamic) {
+        throw new BadRequestError('Invalid step for general will');
+      }
       await saveSigningDetails(trx, willId, stepData);
-      break;
-
-    // Islamic Will specific steps (13-16)
-    case 13: // School of Thought
-    case 14: // Religious Obligations
-    case 15: // Charitable Bequests
-    case 16: // Heirs
-      await saveIslamicDetails(trx, willId, stepNumber, stepData);
       break;
 
     default:
       throw new BadRequestError(`Unknown step number: ${stepNumber}`);
   }
 };
+
 
 /**
  * Upsert testator (Step 1)
@@ -399,32 +415,35 @@ const saveStepSpecificData = async (trx, willId, stepNumber, stepData, will) => 
 const upsertTestator = async (trx, willId, data) => {
   if (!data || Object.keys(data).length === 0) return;
 
-  // Extract fields that go to wills table
-  const { jurisdiction, marital_status, ...testatorData } = data;
+  const {
+    marital_status,
+    ...testatorData
+  } = data;
 
-  // Build wills update object
-  const willsUpdate = {};
-  if (jurisdiction) willsUpdate.jurisdiction = jurisdiction;
-  if (marital_status) willsUpdate.marital_status = marital_status;
+  /**
+   * 1️⃣ Update WILL table (authoritative fields)
+   */
+  const willUpdate = {};
 
-  // Update wills table if there are fields to update
-  if (Object.keys(willsUpdate).length > 0) {
+  if (marital_status !== undefined) {
+    willUpdate.marital_status = marital_status;
+    testatorData.marital_status = marital_status;
+  }
+
+  if (Object.keys(willUpdate).length > 0) {
     await trx
       .updateTable('wills')
-      .set({ ...willsUpdate, updated_at: new Date() })
+      .set({
+        ...willUpdate,
+        updated_at: new Date(),
+      })
       .where('id', '=', willId)
       .execute();
   }
 
-  // Also save jurisdiction and marital_status to testators table for reference
-  if (jurisdiction) {
-    testatorData.jurisdiction = jurisdiction;
-  }
-  if (marital_status) {
-    testatorData.marital_status = marital_status;
-  }
-
-  // Skip if no testator data to save
+  /**
+   * 2️⃣ Upsert TESTATOR table (profile reference)
+   */
   if (Object.keys(testatorData).length === 0) return;
 
   const existing = await trx
@@ -436,7 +455,10 @@ const upsertTestator = async (trx, willId, data) => {
   if (existing) {
     await trx
       .updateTable('testators')
-      .set({ ...testatorData, updated_at: new Date() })
+      .set({
+        ...testatorData,
+        updated_at: new Date(),
+      })
       .where('id', '=', existing.id)
       .execute();
   } else {
@@ -450,547 +472,349 @@ const upsertTestator = async (trx, willId, data) => {
         updated_at: new Date(),
       })
       .execute();
-    }
-  };
-
-/**
- * Save executors (Step 3)
- * Handles array of executors with full replace strategy
- * Supports both Individual and Professional Advisor executors
- */
-
-  const saveExecutors = async (trx, willId, data) => {
-    if (!data || !data.executors) return;
-  
-    const { executors } = data;
-  
-    // Delete existing executors
-    await trx
-      .deleteFrom('executors')
-      .where('will_id', '=', willId)
-      .execute();
-  
-    // Insert new executors
-    if (executors.length > 0) {
-      const executorRecords = executors.map((executor, index) => ({
-        id: executor.id || generateUUID(),
-        will_id: willId,
-        
-        // Executor type
-        executor_type: executor.executor_type || 'individual',
-        
-        // Individual fields
-        title: executor.title,
-        full_name: executor.full_name,
-        relationship_to_testator: executor.relationship_to_testator,
-        
-        // Professional advisor fields
-        business_name: executor.business_name,
-        role_title: executor.role_title,
-        
-        // Contact details
-        phone_country_code: executor.phone_country_code,
-        phone: executor.phone,
-        email: executor.email,
-        
-        // Executor role flags
-        is_alternate: executor.is_alternate || false,
-        is_backup: executor.is_backup || false,
-        is_spouse: executor.is_spouse || false,
-        
-        // Legacy address fields
-        address_line_1: executor.address_line_1,
-        address_line_2: executor.address_line_2,
-        city: executor.city,
-        county: executor.county,
-        postcode: executor.postcode,
-        country: executor.country,
-        
-        order_index: index + 1,
-        created_at: new Date(),
-        updated_at: new Date(),
-      }));
-  
-      await trx
-        .insertInto('executors')
-        .values(executorRecords)
-        .execute();
-    }
-  };
-
-/**
- * Upsert spouse (Step 3)
- */
-const upsertSpouse = async (trx, willId, data) => {
-  if (!data || Object.keys(data).length === 0) return;
-
-  const existing = await trx
-    .selectFrom('spouses')
-    .select('id')
-    .where('will_id', '=', willId)
-    .executeTakeFirst();
-
-  if (existing) {
-    await trx
-      .updateTable('spouses')
-      .set({ ...data, updated_at: new Date() })
-      .where('id', '=', existing.id)
-      .execute();
-  } else {
-    await trx
-      .insertInto('spouses')
-      .values({
-        id: generateUUID(),
-        will_id: willId,
-        ...data,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .execute();
   }
 };
 
-/**
- * Save children (Step 4)
- */
-const saveChildren = async (trx, willId, data) => {
-  if (!data || !data.children) return;
 
-  const { children } = data;
+// Step 2  Executors
+const saveExecutors = async (trx, willId, data) => {
+  if (!data?.executors) return;
 
-  // Delete existing
+  await trx.deleteFrom('executors').where('will_id', '=', willId).execute();
+
+  if (!data.executors.length) return;
+
+  const rows = data.executors.map((e, index) => ({
+    id: e.id || generateUUID(),
+    will_id: willId,
+    executor_type: e.executor_type,
+    title: e.title,
+    full_name: e.full_name,
+    business_name: e.business_name,
+    role_title: e.role_title,
+    relationship_to_testator: e.relationship_to_testator,
+    phone_country_code: e.phone_country_code,
+    phone: e.phone,
+    email: e.email,
+    is_alternate: e.is_alternate,
+    is_backup: e.is_backup,
+    order_index: index + 1,
+    created_at: new Date(),
+    updated_at: new Date(),
+  }));
+
+  await trx.insertInto('executors').values(rows).execute();
+};
+
+// Step 2 (Islamic) - Faith
+const saveIslamicFaith = async () => {}
+
+// Step 3 - Spouse
+const saveSpouse = async (trx, willId, data) => {
+  if (!data) return;
+
+  const { is_spouse, spouse } = data;
+
+  // Update wills table with is_spouse flag
+  await trx
+    .updateTable('wills')
+    .set({
+      is_spouse: is_spouse ?? false,
+      updated_at: new Date(),
+    })
+    .where('id', '=', willId)
+    .execute();
+
+  // If user says they have no spouse → delete all spouse records
+  if (!is_spouse) {
+    await trx
+      .deleteFrom('spouses')
+      .where('will_id', '=', willId)
+      .execute();
+    return;
+  }
+
+  // If spouse array is empty or missing → nothing to save yet (draft)
+  if (!Array.isArray(spouse) || spouse.length === 0) {
+    return;
+  }
+
+  // Full replace strategy
+  await trx
+    .deleteFrom('spouses')
+    .where('will_id', '=', willId)
+    .execute();
+
+  const spouseRecords = spouse.map((s, index) => ({
+    id: s.id || generateUUID(),
+    will_id: willId,
+    title: s.title,
+    full_name: s.full_name,
+    building_number: s.building_number,
+    building_name: s.building_name,
+    street: s.street,
+    town: s.town,
+    city: s.city,
+    county: s.county,
+    postcode: s.postcode,
+    country: s.country,
+    phone_country_code: s.phone_country_code,
+    phone: s.phone,
+    date_of_birth: s.date_of_birth,
+    relationship_to_testator: s.relationship_to_testator,
+    order_index: index + 1,
+    created_at: new Date(),
+    updated_at: new Date(),
+  }));
+
+  await trx
+    .insertInto('spouses')
+    .values(spouseRecords)
+    .execute();
+};
+
+// Step 4 - Beneficiaries (children, guardians, trustees, charities)
+const saveChildren = async (trx, willId, children = []) => {
   await trx.deleteFrom('children').where('will_id', '=', willId).execute();
 
-  // Insert new
-  if (children.length > 0) {
-    const records = children.map((child) => ({
-      id: child.id || generateUUID(),
+  if (!children.length) return;
+
+  await trx.insertInto('children').values(
+    children.map((c, index) => ({
+      id: c.id || generateUUID(),
       will_id: willId,
-      full_name: child.full_name,
-      date_of_birth: child.date_of_birth,
-      is_minor: child.is_minor || false,
-      is_dependent: child.is_dependent || false,
+      title: c.title,
+      full_name: c.full_name,
+      gender: c.gender,
+      date_of_birth: c.date_of_birth,
+      relationship_to_testator: c.relationship_to_testator,
+      building_number: c.building_number,
+      building_name: c.building_name,
+      street: c.street,
+      town: c.town,
+      city: c.city,
+      county: c.county,
+      postcode: c.postcode,
+      country: c.country,
+      inheritance_age: c.inheritance_age,
+      order_index: index + 1,
       created_at: new Date(),
       updated_at: new Date(),
-    }));
-
-    await trx.insertInto('children').values(records).execute();
-  }
+    }))
+  ).execute();
 };
 
-/**
- * Save guardians (Step 5)
- */
-const saveGuardians = async (trx, willId, data) => {
-  if (!data || !data.guardians) return;
-
-  const { guardians } = data;
-
+const saveGuardians = async (trx, willId, guardians = []) => {
   await trx.deleteFrom('guardians').where('will_id', '=', willId).execute();
 
-  if (guardians.length > 0) {
-    const records = guardians.map((guardian, index) => ({
-      id: guardian.id || generateUUID(),
+  if (!guardians.length) return;
+
+  await trx.insertInto('guardians').values(
+    guardians.map((g, index) => ({
+      id: g.id || generateUUID(),
       will_id: willId,
-      full_name: guardian.full_name,
-      address_line_1: guardian.address_line_1,
-      address_line_2: guardian.address_line_2,
-      city: guardian.city,
-      county: guardian.county,
-      postcode: guardian.postcode,
-      country: guardian.country,
-      relationship_to_testator: guardian.relationship_to_testator,
-      is_substitute: guardian.is_substitute || false,
+      title: g.title,
+      full_name: g.full_name,
+      date_of_birth: g.date_of_birth,
+      relationship_to_testator: g.relationship_to_testator,
+      building_number: g.building_number,
+      building_name: g.building_name,
+      street: g.street,
+      town: g.town,
+      city: g.city,
+      county: g.county,
+      postcode: g.postcode,
+      country: g.country,
+      phone_country_code: g.phone_country_code,
+      phone: g.phone,
+      email: g.email,
+      is_alternate: g.is_alternate ?? false,
       order_index: index + 1,
       created_at: new Date(),
       updated_at: new Date(),
-    }));
-
-    await trx.insertInto('guardians').values(records).execute();
-  }
+    }))
+  ).execute();
 };
 
-/**
- * Save inheritance age settings (Step 6)
- */
-const saveInheritanceAge = async (trx, willId, data) => {
+const saveTrustees = async (trx, willId, trustees = []) => {
+  await trx.deleteFrom('trustees').where('will_id', '=', willId).execute();
+
+  if (!trustees.length) return;
+
+  await trx.insertInto('trustees').values(
+    trustees.map((t, index) => ({
+      id: t.id || generateUUID(),
+      will_id: willId,
+      role_type: t.role_type,
+      title: t.title,
+      full_name: t.full_name,
+      date_of_birth: t.date_of_birth,
+      relationship_to_testator: t.relationship_to_testator,
+      building_number: t.building_number,
+      building_name: t.building_name,
+      street: t.street,
+      town: t.town,
+      city: t.city,
+      county: t.county,
+      postcode: t.postcode,
+      country: t.country,
+      phone_country_code: t.phone_country_code,
+      phone: t.phone,
+      email: t.email,
+      include_all_general_powers: t.include_all_general_powers,
+      power_of_management: t.power_of_management,
+      power_of_investment: t.power_of_investment,
+      power_to_delegate: t.power_to_delegate,
+      power_in_relation_to_property: t.power_in_relation_to_property,
+      power_to_lend_and_borrow: t.power_to_lend_and_borrow,
+      power_to_apply_income_for_minors: t.power_to_apply_income_for_minors,
+      power_to_make_advancements: t.power_to_make_advancements,
+      power_to_appropriate_assets: t.power_to_appropriate_assets,
+      power_to_act_by_majority: t.power_to_act_by_majority,
+      power_to_charge: t.power_to_charge,
+      power_to_invest_in_non_interest_accounts: t.power_to_invest_in_non_interest_accounts,
+      additional_powers: t.additional_powers,
+      order_index: index + 1,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }))
+  ).execute();
+};
+
+const saveBeneficiaries = async (trx, willId, beneficiaries = []) => {
+  await trx.deleteFrom('beneficiaries').where('will_id', '=', willId).execute();
+
+  if (!beneficiaries.length) return;
+
+  await trx.insertInto('beneficiaries').values(
+    beneficiaries.map((b, index) => ({
+      id: b.id || generateUUID(),
+      will_id: willId,
+      title: b.title,
+      full_name: b.full_name,
+      relationship_to_testator: b.relationship_to_testator,
+      city: b.city,
+      county: b.county,
+      postcode: b.postcode,
+      country: b.country,
+      phone_country_code: b.phone_country_code,
+      phone: b.phone,
+      email: b.email,
+      is_alternate: b.is_alternate ?? false,
+      order_index: index + 1,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }))
+  ).execute();
+};
+
+const saveCharities = async (trx, willId, charities = []) => {
+  await trx.deleteFrom('charities').where('will_id', '=', willId).execute();
+
+  if (!charities.length) return;
+
+  await trx.insertInto('charities').values(
+    charities.map((c, index) => ({
+      id: c.id || generateUUID(),
+      will_id: willId,
+      name: c.name,
+      registration_number: c.registration_number,
+      address: c.address,
+      gift_amount: c.gift_amount,
+      gift_percentage: c.gift_percentage,
+      gift_description: c.gift_description,
+      is_alternate: c.is_alternate ?? false,
+      order_index: index + 1,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }))
+  ).execute();
+};
+
+const saveBeneficiary = async (trx, willId, data) => {
   if (!data) return;
 
-  const { inheritance_age, delay_inheritance } = data;
+  const {
+    have_children,
+    children,
+    guardians,
+    wants_backup,
+    trustees,
+    beneficiaries,
+    has_charity,
+    charities
+  } = data;
 
-  // Update will with inheritance settings
+  // Update wills table with user-choice flags
   await trx
     .updateTable('wills')
     .set({
-      additional_clauses: JSON.stringify({
-        delay_inheritance,
-        inheritance_age,
-      }),
-      updated_at: new Date(),
-    })
-    .where('id', '=', willId)
-    .execute();
-};
-
-/**
- * Save beneficiaries (Step 7 & 8)
- */
-const saveBeneficiaries = async (trx, willId, data, isRemainderStep) => {
-  if (!data || !data.beneficiaries) return;
-
-  const { beneficiaries } = data;
-
-  // Only delete beneficiaries of the same type (gift vs remainder)
-  await trx
-    .deleteFrom('beneficiaries')
-    .where('will_id', '=', willId)
-    .where('is_remainder_beneficiary', '=', isRemainderStep)
-    .execute();
-
-  if (beneficiaries.length > 0) {
-    const records = beneficiaries.map((ben, index) => ({
-      id: ben.id || generateUUID(),
-      will_id: willId,
-      beneficiary_type: ben.beneficiary_type || 'individual',
-      full_name: ben.full_name,
-      address_line_1: ben.address_line_1,
-      address_line_2: ben.address_line_2,
-      city: ben.city,
-      county: ben.county,
-      postcode: ben.postcode,
-      country: ben.country,
-      relationship_to_testator: ben.relationship_to_testator,
-      share_percentage: ben.share_percentage,
-      specific_gift_description: ben.specific_gift_description,
-      is_remainder_beneficiary: isRemainderStep,
-      inheritance_age: ben.inheritance_age,
-      pass_to_children_if_deceased: ben.pass_to_children_if_deceased ?? true,
-      is_alternate: ben.is_alternate || false,
-      alternate_for_id: ben.alternate_for_id,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }));
-
-    await trx.insertInto('beneficiaries').values(records).execute();
-  }
-
-  // Also save charities if included
-  if (data.charities && data.charities.length > 0) {
-    await trx.deleteFrom('charities').where('will_id', '=', willId).execute();
-
-    const charityRecords = data.charities.map((charity, index) => ({
-      id: charity.id || generateUUID(),
-      will_id: willId,
-      name: charity.name,
-      address_line_1: charity.address_line_1,
-      address_line_2: charity.address_line_2,
-      city: charity.city,
-      county: charity.county,
-      postcode: charity.postcode,
-      country: charity.country,
-      registration_number: charity.registration_number,
-      gift_amount: charity.gift_amount,
-      gift_percentage: charity.gift_percentage,
-      gift_description: charity.gift_description,
-      is_alternate: charity.is_alternate || false,
-      alternate_for_id: charity.alternate_for_id,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }));
-
-    await trx.insertInto('charities').values(charityRecords).execute();
-  }
-};
-
-/**
- * Save total failure clause (Step 9)
- */
-const saveTotalFailure = async (trx, willId, data) => {
-  if (!data) return;
-
-  const { distribution_type, wipeout_beneficiaries } = data;
-
-  // Delete existing
-  const existing = await trx
-    .selectFrom('total_failure_clauses')
-    .select('id')
-    .where('will_id', '=', willId)
-    .executeTakeFirst();
-
-  if (existing) {
-    await trx.deleteFrom('wipeout_beneficiaries').where('total_failure_clause_id', '=', existing.id).execute();
-    await trx.deleteFrom('total_failure_clauses').where('id', '=', existing.id).execute();
-  }
-
-  // Create new
-  const clauseId = generateUUID();
-  await trx
-    .insertInto('total_failure_clauses')
-    .values({
-      id: clauseId,
-      will_id: willId,
-      distribution_type: distribution_type || 'equal_family',
-      created_at: new Date(),
-      updated_at: new Date(),
-    })
-    .execute();
-
-  // Add wipeout beneficiaries if custom distribution
-  if (distribution_type === 'custom' && wipeout_beneficiaries?.length > 0) {
-    const records = wipeout_beneficiaries.map((ben, index) => ({
-      id: generateUUID(),
-      total_failure_clause_id: clauseId,
-      beneficiary_type: ben.beneficiary_type || 'individual',
-      full_name: ben.full_name,
-      address: ben.address,
-      share_percentage: ben.share_percentage,
-      is_alternate: ben.is_alternate || false,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }));
-
-    await trx.insertInto('wipeout_beneficiaries').values(records).execute();
-  }
-};
-
-/**
- * Save pets (Step 10)
- */
-const savePets = async (trx, willId, data) => {
-  if (!data || !data.pets) return;
-
-  const { pets } = data;
-
-  await trx.deleteFrom('pets').where('will_id', '=', willId).execute();
-
-  if (pets.length > 0) {
-    const records = pets.map((pet, index) => ({
-      id: pet.id || generateUUID(),
-      will_id: willId,
-      name: pet.name,
-      description: pet.description,
-      fund_amount: pet.fund_amount,
-      let_executor_appoint_caretaker: pet.let_executor_appoint_caretaker ?? true,
-      caretaker_name: pet.caretaker_name,
-      caretaker_address: pet.caretaker_address,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }));
-
-    await trx.insertInto('pets').values(records).execute();
-  }
-};
-
-/**
- * Save additional clauses (Step 11)
- */
-const saveAdditionalClauses = async (trx, willId, data) => {
-  if (!data) return;
-
-  const { additional_clauses, funeral_wishes } = data;
-
-  // Update will with additional clauses
-  if (additional_clauses) {
-    // Get existing additional_clauses and merge
-    const will = await trx
-      .selectFrom('wills')
-      .select('additional_clauses')
-      .where('id', '=', willId)
-      .executeTakeFirst();
-
-    const existingClauses = will?.additional_clauses ? JSON.parse(will.additional_clauses) : {};
-
-    await trx
-      .updateTable('wills')
-      .set({
-        additional_clauses: JSON.stringify({
-          ...existingClauses,
-          clauses: additional_clauses,
-        }),
-        updated_at: new Date(),
-      })
-      .where('id', '=', willId)
-      .execute();
-  }
-
-  // Save funeral wishes
-  if (funeral_wishes) {
-    const existing = await trx
-      .selectFrom('funeral_wishes')
-      .select('id')
-      .where('will_id', '=', willId)
-      .executeTakeFirst();
-
-    if (existing) {
-      await trx
-        .updateTable('funeral_wishes')
-        .set({ ...funeral_wishes, updated_at: new Date() })
-        .where('id', '=', existing.id)
-        .execute();
-    } else {
-      await trx
-        .insertInto('funeral_wishes')
-        .values({
-          id: generateUUID(),
-          will_id: willId,
-          ...funeral_wishes,
-          created_at: new Date(),
-          updated_at: new Date(),
-        })
-        .execute();
-    }
-  }
-};
-
-/**
- * Save signing details (Step 12)
- */
-const saveSigningDetails = async (trx, willId, data) => {
-  if (!data) return;
-
-  const { signing_date, signing_place, witnesses } = data;
-
-  // Update will signing info
-  await trx
-    .updateTable('wills')
-    .set({
-      signing_date,
-      signing_place,
+      have_children: have_children ?? false,
+      wants_backup: wants_backup ?? false,
+      has_charity: has_charity ?? false,
       updated_at: new Date(),
     })
     .where('id', '=', willId)
     .execute();
 
-  // Save witnesses
-  if (witnesses && witnesses.length > 0) {
-    await trx.deleteFrom('witnesses').where('will_id', '=', willId).execute();
+  // Save/Delete based on flags using consistent pattern
+  // TRUE = Save data | FALSE = Delete all records (user changed mind)
 
-    const records = witnesses.map((witness, index) => ({
-      id: witness.id || generateUUID(),
-      will_id: willId,
-      full_name: witness.full_name,
-      address_line_1: witness.address_line_1,
-      address_line_2: witness.address_line_2,
-      city: witness.city,
-      county: witness.county,
-      postcode: witness.postcode,
-      country: witness.country,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }));
+  // 1️⃣ Children (controlled by have_children flag)
+  if (have_children) {
+    await saveChildren(trx, willId, children || []);
+  } else {
+    await saveChildren(trx, willId, []); // Deletes all
+  }
 
-    await trx.insertInto('witnesses').values(records).execute();
+  // 2️⃣ Guardians (only relevant if have_children = true, delete when no children)
+  if (have_children) {
+    await saveGuardians(trx, willId, guardians || []);
+  } else {
+    await saveGuardians(trx, willId, []); // Deletes all guardians when no children
+  }
+
+  // 3️⃣ Trustees (backup) (controlled by wants_backup flag)
+  if (wants_backup) {
+    await saveTrustees(trx, willId, trustees || []);
+  } else {
+    await saveTrustees(trx, willId, []); // Deletes all
+  }
+
+  // 4️⃣ Beneficiaries (always saved - independent of other flags)
+  await saveBeneficiaries(trx, willId, beneficiaries || []);
+
+  // 5️⃣ Charities (controlled by has_charity flag)
+  if (has_charity) {
+    await saveCharities(trx, willId, charities || []);
+  } else {
+    await saveCharities(trx, willId, []); // Deletes all
   }
 };
 
-/**
- * Save Islamic will details (Steps 13-16)
- */
-const saveIslamicDetails = async (trx, willId, stepNumber, data) => {
-  if (!data) return;
+// Step 5 - Assets
+const saveAssets = async () => {};
 
-  // Get or create islamic_will_details
-  let islamicDetails = await trx
-    .selectFrom('islamic_will_details')
-    .select('id')
-    .where('will_id', '=', willId)
-    .executeTakeFirst();
+// Step 6 - Debts
+const saveDebts = async () => {};
 
-  if (!islamicDetails) {
-    const detailsId = generateUUID();
-    await trx
-      .insertInto('islamic_will_details')
-      .values({
-        id: detailsId,
-        will_id: willId,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .execute();
-    islamicDetails = { id: detailsId };
-  }
+// Step 7 Gifts (General) and Step 8 Gifts - (Islamic)
+const saveGifts = async () => {};
 
-  switch (stepNumber) {
-    case 13: // School of Thought
-      await trx
-        .updateTable('islamic_will_details')
-        .set({
-          school_of_thought: data.school_of_thought,
-          declaration_of_faith: data.declaration_of_faith,
-          updated_at: new Date(),
-        })
-        .where('id', '=', islamicDetails.id)
-        .execute();
-      break;
+// Step 8 Residual (General)
+const saveResidual = async () => {};
 
-    case 14: // Religious Obligations
-      await trx
-        .updateTable('islamic_will_details')
-        .set({
-          unfulfilled_obligations: JSON.stringify(data.unfulfilled_obligations),
-          kaffarah_description: data.kaffarah_description,
-          kaffarah_amount: data.kaffarah_amount,
-          unpaid_mahr: data.unpaid_mahr,
-          updated_at: new Date(),
-        })
-        .where('id', '=', islamicDetails.id)
-        .execute();
-      break;
+// Step 9 Funeral
+const saveFuneral = async () => {};
 
-    case 15: // Charitable Bequests
-      await trx
-        .updateTable('islamic_will_details')
-        .set({
-          charitable_bequest_percentage: data.charitable_bequest_percentage,
-          sadaqa_jariyah_details: data.sadaqa_jariyah_details,
-          loan_forgiveness_details: data.loan_forgiveness_details,
-          updated_at: new Date(),
-        })
-        .where('id', '=', islamicDetails.id)
-        .execute();
-      break;
+// Step 10 Distribution (Islamic)
+const saveIslamicDistribution = async () => {};
 
-    case 16: // Heirs
-      // Delete existing heirs
-      await trx
-        .deleteFrom('islamic_heirs')
-        .where('islamic_will_details_id', '=', islamicDetails.id)
-        .execute();
+// Step 10 Witnesses (General) and Step 11 Witnesses (Islamic)
+const saveWitnesses = async () => {};
 
-      // Add new heirs
-      if (data.heirs && data.heirs.length > 0) {
-        const heirRecords = data.heirs.map((heir) => ({
-          id: generateUUID(),
-          islamic_will_details_id: islamicDetails.id,
-          relationship: heir.relationship,
-          full_name: heir.full_name,
-          is_alive: heir.is_alive ?? true,
-          calculated_share: heir.calculated_share,
-          created_at: new Date(),
-          updated_at: new Date(),
-        }));
-
-        await trx.insertInto('islamic_heirs').values(heirRecords).execute();
-      }
-
-      // Update scholar info
-      await trx
-        .updateTable('islamic_will_details')
-        .set({
-          appointed_scholar_name: data.appointed_scholar_name,
-          appointed_scholar_contact: data.appointed_scholar_contact,
-          updated_at: new Date(),
-        })
-        .where('id', '=', islamicDetails.id)
-        .execute();
-      break;
-  }
-};
+// Step 11 Signing (General) and Step 12 Signing (Islamic)
+const saveSigningDetails = async () => {};
 
 /**
  * Get step data for loading a specific step
@@ -998,73 +822,197 @@ const saveIslamicDetails = async (trx, willId, stepNumber, data) => {
  */
 const getStepData = async (willId, stepNumber, userId, userRole) => {
   const will = await getWillWithAccess(willId, userId, userRole);
-  const maxSteps = will.will_type === WILL_TYPES.ISLAMIC ? TOTAL_STEPS.ISLAMIC : TOTAL_STEPS.GENERAL;
+  const isIslamic = will.will_type === WILL_TYPES.ISLAMIC;
+  const maxSteps = isIslamic ? TOTAL_STEPS.ISLAMIC : TOTAL_STEPS.GENERAL;
 
-  // Get step status
   const status = getStepStatus(will, stepNumber);
   const editCheck = checkStepEditable(will, stepNumber);
 
-  // Get step-specific data
   let data = null;
+
   switch (stepNumber) {
-    case 1:
-      const testator = await db.selectFrom('testators').selectAll().where('will_id', '=', willId).executeTakeFirst();
-      // Include jurisdiction and marital_status from will
-      data = { 
-        ...testator, 
-        jurisdiction: testator?.jurisdiction || will.jurisdiction,
-        marital_status: testator?.marital_status || will.marital_status,
-      };
-      break;
-    case 2: // Executors (swapped - was step 3)
-      data = { executors: await db.selectFrom('executors').selectAll().where('will_id', '=', willId).orderBy('order_index').execute() };
-      break;
-    case 3: // Spouse (swapped - was step 2)
-      data = await db.selectFrom('spouses').selectAll().where('will_id', '=', willId).executeTakeFirst();
-      break;
-    case 4:
-      data = { children: await db.selectFrom('children').selectAll().where('will_id', '=', willId).execute() };
-      break;
-    case 5:
-      data = { guardians: await db.selectFrom('guardians').selectAll().where('will_id', '=', willId).orderBy('order_index').execute() };
-      break;
-    case 6:
-      data = will.additional_clauses ? JSON.parse(will.additional_clauses) : {};
-      break;
-    case 7:
+    // STEP 1 — TESTATOR
+    case 1: {
+      const testator = await db
+        .selectFrom('testators')
+        .selectAll()
+        .where('will_id', '=', willId)
+        .executeTakeFirst();
+
       data = {
-        beneficiaries: await db.selectFrom('beneficiaries').selectAll().where('will_id', '=', willId).where('is_remainder_beneficiary', '=', false).orderBy('order_index').execute(),
-        charities: await db.selectFrom('charities').selectAll().where('will_id', '=', willId).orderBy('order_index').execute(),
+        ...testator,
+        marital_status: testator?.marital_status ?? will.marital_status,
+        jurisdiction_country: testator?.jurisdiction_country ?? will.jurisdiction_country,
+        jurisdiction_region: testator?.jurisdiction_region ?? will.jurisdiction_region,
       };
       break;
-    case 8:
-      data = {
-        beneficiaries: await db.selectFrom('beneficiaries').selectAll().where('will_id', '=', willId).where('is_remainder_beneficiary', '=', true).orderBy('order_index').execute(),
-      };
-      break;
-    case 9:
-      const clause = await db.selectFrom('total_failure_clauses').selectAll().where('will_id', '=', willId).executeTakeFirst();
-      if (clause) {
-        const wipeout = await db.selectFrom('wipeout_beneficiaries').selectAll().where('total_failure_clause_id', '=', clause.id).orderBy('order_index').execute();
-        data = { ...clause, wipeout_beneficiaries: wipeout };
+    }
+
+    // STEP 3 — GENERAL: EXECUTORS | ISLAMIC: FAITH
+    case 2: {
+      if (isIslamic) {
+        data = await db
+          .selectFrom('islamic_faith')
+          .selectAll()
+          .where('will_id', '=', willId)
+          .executeTakeFirst();
+      } else {
+        data = {
+          executors: await db
+            .selectFrom('executors')
+            .selectAll()
+            .where('will_id', '=', willId)
+            .orderBy('order_index')
+            .execute(),
+        };
       }
       break;
+    }
+
+    // STEP 3 — GENERAL: SPOUSE | ISLAMIC: EXECUTORS
+    case 3: {
+      if (isIslamic) {
+        data = {
+          executors: await db
+            .selectFrom('executors')
+            .selectAll()
+            .where('will_id', '=', willId)
+            .orderBy('order_index')
+            .execute(),
+        };
+      } else {
+        const spouse = await db
+          .selectFrom('spouses')
+          .selectAll()
+          .where('will_id', '=', willId)
+          .orderBy('order_index')
+          .execute();
+
+        data = {
+          is_spouse: will.is_spouse ?? false,
+          spouse,
+        };
+      }
+      break;
+    }
+
+    // STEP 4 — GENERAL: BENEFICIARY BUNDLE | ISLAMIC: SPOUSE
+    case 4: {
+      if (isIslamic) {
+        const spouse = await db
+          .selectFrom('spouses')
+          .selectAll()
+          .where('will_id', '=', willId)
+          .orderBy('order_index')
+          .execute();
+
+        data = {
+          is_spouse: will.is_spouse ?? false,
+          spouse,
+        };
+      } else {
+        const children = await db.selectFrom('children').selectAll().where('will_id', '=', willId).execute();
+        const guardians = await db.selectFrom('guardians').selectAll().where('will_id', '=', willId).execute();
+        const trustees = await db.selectFrom('trustees').selectAll().where('will_id', '=', willId).execute();
+        const beneficiaries = await db.selectFrom('beneficiaries').selectAll().where('will_id', '=', willId).execute();
+        const charities = await db.selectFrom('charities').selectAll().where('will_id', '=', willId).execute();
+
+        data = {
+          have_children: will.have_children ?? false,
+          children,
+          guardians,
+          wants_backup: will.wants_backup ?? false,
+          trustees,
+          beneficiaries,
+          has_charity: will.has_charity ?? false,
+          charities,
+        };
+      }
+      break;
+    }
+
+    // STEP 5 — GENERAL: ASSETS | ISLAMIC: BENEFICIARY BUNDLE
+    case 5: {
+      if (isIslamic) {
+        const children = await db.selectFrom('children').selectAll().where('will_id', '=', willId).execute();
+        const guardians = await db.selectFrom('guardians').selectAll().where('will_id', '=', willId).execute();
+        const trustees = await db.selectFrom('trustees').selectAll().where('will_id', '=', willId).execute();
+        const beneficiaries = await db.selectFrom('beneficiaries').selectAll().where('will_id', '=', willId).execute();
+        const charities = await db.selectFrom('charities').selectAll().where('will_id', '=', willId).execute();
+
+        data = {
+          have_children: will.have_children ?? false,
+          children,
+          guardians,
+          wants_backup: will.wants_backup ?? false,
+          trustees,
+          beneficiaries,
+          has_charity: will.has_charity ?? false,
+          charities,
+        };
+      } else {
+        data = { assets: [] }; // table not implemented yet
+      }
+      break;
+    }
+
+    // STEP 6 — ASSETS (Islamic) | DEBTS (General)
+    case 6:
+      data = {};
+      break;
+
+    // STEP 7 — DEBTS (Islamic) | GIFTS (General)
+    case 7:
+      data = {};
+      break;
+
+    // STEP 8 — GIFTS (Islamic) | RESIDUAL (General)
+    case 8:
+      data = {};
+      break;
+
+    // STEP 9 — FUNERAL
+    case 9:
+      data = {};
+      break;
+
+    // STEP 10 — GENERAL: WITNESSES | ISLAMIC: DISTRIBUTION
     case 10:
-      data = { pets: await db.selectFrom('pets').selectAll().where('will_id', '=', willId).orderBy('order_index').execute() };
+      if (isIslamic) {
+        data = {};
+      } else {
+        data = {
+          witnesses: await db
+            .selectFrom('witnesses')
+            .selectAll()
+            .where('will_id', '=', willId)
+            .orderBy('order_index')
+            .execute(),
+        };
+      }
       break;
+
+    // STEP 11 — GENERAL: SIGNING | ISLAMIC: WITNESSES
     case 11:
-      const funeralWishes = await db.selectFrom('funeral_wishes').selectAll().where('will_id', '=', willId).executeTakeFirst();
-      const additionalClauses = will.additional_clauses ? JSON.parse(will.additional_clauses) : {};
-      data = { funeral_wishes: funeralWishes, additional_clauses: additionalClauses.clauses || [] };
+      if (isIslamic) {
+        data = {
+          witnesses: await db
+            .selectFrom('witnesses')
+            .selectAll()
+            .where('will_id', '=', willId)
+            .orderBy('order_index')
+            .execute(),
+        };
+      } else {
+        data = { additional_clauses: [] };
+      }
       break;
+
+    // STEP 12 — SIGNING (Islamic only)
     case 12:
-      data = {
-        signing_date: will.signing_date,
-        signing_place: will.signing_place,
-        witnesses: await db.selectFrom('witnesses').selectAll().where('will_id', '=', willId).orderBy('order_index').execute(),
-      };
-      break;
-    default:
+      if (isIslamic) {
+        data = { additional_clauses: [] };
+      }
       break;
   }
 
@@ -1086,19 +1034,25 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
   };
 };
 
+
 /**
  * Get all steps status for progress bar
  */
 const getAllStepsStatus = async (willId, userId, userRole) => {
   const will = await getWillWithAccess(willId, userId, userRole);
-  const maxSteps = will.will_type === WILL_TYPES.ISLAMIC ? TOTAL_STEPS.ISLAMIC : TOTAL_STEPS.GENERAL;
+  const maxSteps =
+    will.will_type === WILL_TYPES.ISLAMIC
+      ? TOTAL_STEPS.ISLAMIC
+      : TOTAL_STEPS.GENERAL;
 
   const steps = [];
-  for (let i = 1; i <= maxSteps; i++) {
-    const status = getStepStatus(will, i);
-    const editCheck = checkStepEditable(will, i);
+
+  for (let step = 1; step <= maxSteps; step++) {
+    const status = getStepStatus(will, step);
+    const editCheck = checkStepEditable(will, step);
+
     steps.push({
-      step: i,
+      step,
       status,
       can_edit: editCheck.canEdit,
       locked_reason: editCheck.reason,
@@ -1119,6 +1073,7 @@ const getAllStepsStatus = async (willId, userId, userRole) => {
   };
 };
 
+
 module.exports = {
   saveStepData,
   getStepData,
@@ -1126,4 +1081,5 @@ module.exports = {
   unlockWillForEditing,
   checkStepEditable,
   getStepStatus,
+  getWillWithAccess,
 };
