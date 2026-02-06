@@ -1,13 +1,3 @@
-/**
- * Migration: Add jurisdiction to wills/testators and expand spouses fields
- *
- * Adds:
- * - wills.jurisdiction (if missing)
- * - testators.jurisdiction
- * - spouses.building_number, spouses.building_name, spouses.phone_country_code,
- *   spouses.phone, spouses.date_of_birth, spouses.relationship_to_testator
- */
-
 const { sql } = require('kysely');
 
 const up = async (db) => {
