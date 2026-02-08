@@ -10,6 +10,7 @@ const testatorsRoutes = require('../modules/testators/testators.routes');
 const executorsRoutes = require('../modules/executors/executors.routes');
 const spousesRoutes = require('../modules/spouses/spouses.routes');
 const beneficiariesRoutes = require('../modules/beneficiaries/beneficiaries.routes');
+const assetsRoutes = require('../modules/assets/assets.routes');
 
 const router = express.Router();
 
@@ -60,6 +61,7 @@ router.use(`${API_PREFIX}/wills/:willId/testator`, testatorsRoutes);
 router.use(`${API_PREFIX}/wills/:willId/executors`, executorsRoutes);
 router.use(`${API_PREFIX}/wills/:willId/spouse`, spousesRoutes);
 router.use(`${API_PREFIX}/wills/:willId/beneficiaries`, beneficiariesRoutes);
+router.use(`${API_PREFIX}/wills/:willId/assets`, assetsRoutes);
 
 // Admin routes
 // router.use(`${API_PREFIX}/admin`, adminRoutes);

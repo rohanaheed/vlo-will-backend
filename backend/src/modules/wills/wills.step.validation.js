@@ -185,14 +185,80 @@ const step4Schema = z.object({
 }).passthrough();
 
 // STEP 5: ASSETS
-const assetsSchema = z.object({
+const propertyAssetsSchema = z.object({
   id: uuidSchema.optional().nullable(),
-  type: z.enum(['property', 'savings', 'investments', 'business', 'other']).optional()
+  building_number: z.string().max(50).optional().nullable(),
+  building_name: z.string().max(100).optional().nullable(),
+  street: z.string().max(255).optional().nullable(),
+  town: z.string().max(100).optional().nullable(),
+  city: z.string().max(100).optional().nullable(),
+  county: z.string().max(100).optional().nullable(),
+  postcode: z.string().max(20).optional().nullable(),
+  country: z.string().max(100).optional().nullable(),
+  ownership_type: z.string().max(100).optional().nullable(),
+  estimated_value: z.number().min(1).optional().nullable(),
+  account_location: z.string().max(100).optional().nullable(),
+  is_mortgage: z.boolean().optional().default(false),
+  lender_name: z.string().max(100).optional().nullable(),
+  note: z.string().max(1000).optional().nullable()
 }).passthrough();
 
+const bankAccountsSchema = z.object({
+  id: uuidSchema.optional().nullable(),
+  bank_name: z.string().max(255).optional().nullable(),
+  account_type: z.string().max(100).optional().nullable(),
+  account_number: z.string().max(50).optional().nullable(),
+  account_location: z.string().max(255).optional().nullable(),
+  additional_information: z.string().max(1000).optional().nullable()
+})
+
+const investmentsSchema = z.object({
+  id: uuidSchema.optional().nullable(),
+  company_or_fund_name: z.string().max(255).optional().nullable(),
+  investment_type: z.string().max(50).optional().nullable(),
+  account_or_policy_number: z.string().max(100).optional().nullable(),
+  managed_by: z.string().max(255).optional().nullable(),
+  additional_information: z.string().max(1000).optional().nullable()
+})
+
+const valuableItemsSchema = z.object({
+  id: uuidSchema.optional().nullable(),
+  category: z.string().max(50).optional().nullable(),
+  description: z.string().max(1000).optional().nullable(),
+  location: z.string().max(255).optional().nullable(),
+  additional_information: z.string().max(1000).optional().nullable()
+})
+const digitalAssetsSchema = z.object({
+  id: uuidSchema.optional().nullable(),
+  asset_type: z.string().max(50).optional().nullable(),
+  platform: z.string().max(255).optional().nullable(),
+  account_id: z.string().max(255).optional().nullable(),
+  additional_information: z.string().max(1000).optional().nullable()
+})
+
+const intellectualAssetsSchema = z.object({
+  id: uuidSchema.optional().nullable(),
+  asset_type: z.string().max(50).optional().nullable(),
+  title: z.string().max(255).optional().nullable(),
+  desciption: z.string().max(1000).optional().nullable(),
+  status: z.string().max(50).optional().nullable()
+})
+
 const step5Schema = z.object({
-  assets: z.array(assetsSchema).optional().default([]),
+  has_property: z.boolean().optional().default(false),
+  properties: z.array(propertyAssetsSchema).default([]),
+  has_bank_account: z.boolean().optional().default(false),
+  bank_accounts: z.array(bankAccountsSchema).default([]),
+  has_investment: z.boolean().optional().default(false),
+  investments: z.array(investmentsSchema).default([]),
+  has_valuable_items: z.boolean().optional().default(false),
+  valuable_items: z.array(valuableItemsSchema).default([]),
+  has_digital_asset: z.boolean().optional().default(false),
+  digital_assets: z.array(digitalAssetsSchema).default([]),
+  has_intellectual_asset: z.boolean().optional().default(false),
+  intellectual_assets: z.array(intellectualAssetsSchema).default([]),
 }).passthrough();
+
 
 // STEP 6: LIABILITIES
 const debtsSchema = z.object({

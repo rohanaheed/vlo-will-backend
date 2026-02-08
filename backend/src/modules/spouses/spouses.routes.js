@@ -1,45 +1,45 @@
 const express = require('express');
-const spousesController = require('./spouses.controller');
-const spousesValidation = require('./spouses.validation');
-const { validate } = require('../../middleware/validate');
-const { authenticate } = require('../../middleware/auth');
-
 const router = express.Router({ mergeParams: true });
 
-// All routes require authentication
-router.use(authenticate);
+const spousesCtrl = require('./spouses.controller');
+const { validate } = require('../../middleware/validate');
+const spousesValidation = require('./spouses.validation');
 
-/**
- * @route   GET /api/v1/wills/:willId/spouse
- * @desc    Get spouse info
- * @access  Private
- */
+// SPOUSES ROUTES
 router.get(
-  '/',
+  '/spouses',
   validate(spousesValidation.willIdParamSchema),
-  spousesController.getSpouse
+  spousesCtrl.getSpouses
 );
 
-/**
- * @route   POST /api/v1/wills/:willId/spouse
- * @desc    Create or update spouse
- * @access  Private
- */
+router.get(
+  '/spouses/:spouseId',
+  validate(spousesValidation.spouseIdParamSchema),
+  spousesCtrl.getSpouseById
+);
+
 router.post(
-  '/',
-  validate(spousesValidation.spouseSchema),
-  spousesController.upsertSpouse
+  '/spouses',
+  validate(spousesValidation.createSpouseSchema),
+  spousesCtrl.createSpouse
 );
 
-/**
- * @route   PUT /api/v1/wills/:willId/spouse
- * @desc    Update spouse
- * @access  Private
- */
 router.put(
-  '/',
-  validate(spousesValidation.spouseSchema),
-  spousesController.upsertSpouse
+  '/spouses/:spouseId',
+  validate(spousesValidation.updateSpouseSchema),
+  spousesCtrl.updateSpouse
+);
+
+router.delete(
+  '/spouses/:spouseId',
+  validate(spousesValidation.spouseIdParamSchema),
+  spousesCtrl.deleteSpouse
+);
+
+router.post(
+  '/spouses/reorder',
+  validate(spousesValidation.reorderSpousesSchema),
+  spousesCtrl.reorderSpouses
 );
 
 module.exports = router;

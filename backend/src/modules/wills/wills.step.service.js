@@ -1,24 +1,33 @@
-const { db } = require('../../db');
-const { generateUUID } = require('../../utils/helpers');
-const { NotFoundError, BadRequestError, ForbiddenError } = require('../../utils/errors');
-const { WILL_STATUSES, WILL_TYPES, TOTAL_STEPS, ROLES } = require('../../utils/constants');
-const logger = require('../../utils/logger');
+const { db } = require("../../db");
+const { generateUUID } = require("../../utils/helpers");
+const {
+  NotFoundError,
+  BadRequestError,
+  ForbiddenError,
+} = require("../../utils/errors");
+const {
+  WILL_STATUSES,
+  WILL_TYPES,
+  TOTAL_STEPS,
+  ROLES,
+} = require("../../utils/constants");
+const logger = require("../../utils/logger");
 
 // Get will with ownership check
 const getWillWithAccess = async (willId, userId, userRole) => {
   const will = await db
-    .selectFrom('wills')
+    .selectFrom("wills")
     .selectAll()
-    .where('id', '=', willId)
+    .where("id", "=", willId)
     .executeTakeFirst();
 
   if (!will) {
-    throw new NotFoundError('Will');
+    throw new NotFoundError("Will");
   }
 
   if (userRole !== ROLES.SUPER_ADMIN && userRole !== ROLES.ADMIN) {
     if (will.user_id !== userId) {
-      throw new NotFoundError('Will');
+      throw new NotFoundError("Will");
     }
   }
 
@@ -27,18 +36,18 @@ const getWillWithAccess = async (willId, userId, userRole) => {
 
 /**
  * Check if a step is editable
- * 
+ *
  * NEW LOGIC:
  * - Before payment: User can edit any step up to current progress
  * - After payment: All steps locked unless edit_unlocked=true
- * 
+ *
  * @param {object} will - Will object
  * @param {number} stepNumber - Step to check
  * @returns {object} { canEdit: boolean, reason: string }
  */
 const checkStepEditable = (will, stepNumber) => {
   const highestCompleted = will.highest_completed_step || 0;
-  
+
   // CASE 1: Will has been paid for
   if (will.is_paid) {
     // If edit is unlocked (paid to edit again), allow editing
@@ -47,15 +56,16 @@ const checkStepEditable = (will, stepNumber) => {
       if (stepNumber <= highestCompleted + 1) {
         return { canEdit: true, reason: null };
       }
-      return { 
-        canEdit: false, 
-        reason: `Cannot access step ${stepNumber}. Please complete step ${highestCompleted + 1} first.` 
+      return {
+        canEdit: false,
+        reason: `Cannot access step ${stepNumber}. Please complete step ${highestCompleted + 1} first.`,
       };
     }
     // Paid but not unlocked - locked for editing
-    return { 
-      canEdit: false, 
-      reason: 'Will is locked after payment. Payment required to unlock editing.' 
+    return {
+      canEdit: false,
+      reason:
+        "Will is locked after payment. Payment required to unlock editing.",
     };
   }
 
@@ -66,67 +76,67 @@ const checkStepEditable = (will, stepNumber) => {
   }
 
   // Trying to skip ahead
-  return { 
-    canEdit: false, 
-    reason: `Cannot access step ${stepNumber}. Please complete step ${highestCompleted + 1} first.` 
+  return {
+    canEdit: false,
+    reason: `Cannot access step ${stepNumber}. Please complete step ${highestCompleted + 1} first.`,
   };
 };
 
 /**
  * Get step status for frontend
- * 
+ *
  * Status values:
  * - 'completed': Step is done (before payment - still editable)
  * - 'current': Current step to fill
  * - 'upcoming': Future step, not accessible yet
  * - 'locked': Paid and locked (cannot edit)
  * - 'editable': Paid and unlocked (can edit)
- * 
+ *
  * @param {object} will - Will object
  * @param {number} stepNumber - Step to check
  * @returns {string} 'completed' | 'current' | 'upcoming' | 'locked' | 'editable'
  */
 const getStepStatus = (will, stepNumber) => {
   const highestCompleted = will.highest_completed_step || 0;
-  
+
   // CASE 1: Will has been paid
   if (will.is_paid) {
     if (will.edit_unlocked) {
       // Paid and unlocked - editable
       if (stepNumber <= highestCompleted) {
-        return 'editable';
+        return "editable";
       }
       if (stepNumber === highestCompleted + 1) {
-        return 'current';
+        return "current";
       }
-      return 'upcoming';
+      return "upcoming";
     }
     // Paid but locked
     if (stepNumber <= highestCompleted) {
-      return 'locked';
+      return "locked";
     }
     if (stepNumber === highestCompleted + 1) {
-      return 'locked'; // Current step also locked after payment
+      return "locked"; // Current step also locked after payment
     }
-    return 'upcoming';
+    return "upcoming";
   }
 
   // CASE 2: Not paid yet - steps are editable before payment
   if (stepNumber <= highestCompleted) {
-    return 'completed'; // Done but still editable (before payment)
+    return "completed"; // Done but still editable (before payment)
   }
-  
+
   if (stepNumber === highestCompleted + 1) {
-    return 'current'; // Current step to fill
+    return "current"; // Current step to fill
   }
-  
-  return 'upcoming'; // Not yet accessible
+
+  return "upcoming"; // Not yet accessible
 };
 
 /**
  * Save step data and auto-advance
  * Single unified endpoint for all step operations
- * 
+ *
  * @param {string} willId - Will ID
  * @param {number} stepNumber - Current step being saved
  * @param {object} stepData - Data for this step
@@ -134,16 +144,28 @@ const getStepStatus = (will, stepNumber) => {
  * @param {string} userRole - User role
  * @param {object} options - { action: 'save' | 'save_and_continue' | 'save_and_back' | 'skip_and_continue' }
  */
-const saveStepData = async (willId, stepNumber, stepData, userId, userRole, options = {}) => {
+const saveStepData = async (
+  willId,
+  stepNumber,
+  stepData,
+  userId,
+  userRole,
+  options = {},
+) => {
   const { action } = options;
 
   // Verify will access
   const will = await getWillWithAccess(willId, userId, userRole);
 
   // Validate step number
-  const maxSteps = will.will_type === WILL_TYPES.ISLAMIC ? TOTAL_STEPS.ISLAMIC : TOTAL_STEPS.GENERAL;
+  const maxSteps =
+    will.will_type === WILL_TYPES.ISLAMIC
+      ? TOTAL_STEPS.ISLAMIC
+      : TOTAL_STEPS.GENERAL;
   if (stepNumber < 1 || stepNumber > maxSteps) {
-    throw new BadRequestError(`Invalid step number. Must be between 1 and ${maxSteps}`);
+    throw new BadRequestError(
+      `Invalid step number. Must be between 1 and ${maxSteps}`,
+    );
   }
 
   // Check if step is editable (STEP LOCKING LOGIC)
@@ -158,7 +180,7 @@ const saveStepData = async (willId, stepNumber, stepData, userId, userRole, opti
   // Use transaction to ensure atomicity
   const result = await db.transaction().execute(async (trx) => {
     // Save step-specific data unless skipping
-    if (action !== 'skip_and_continue') {
+    if (action !== "skip_and_continue") {
       await saveStepSpecificData(trx, willId, stepNumber, stepData, will);
     }
 
@@ -167,11 +189,11 @@ const saveStepData = async (willId, stepNumber, stepData, userId, userRole, opti
     let newHighestCompleted = will.highest_completed_step || 0;
     let newEditUnlocked = will.edit_unlocked;
     let newStatus = will.status;
-    
-    if (action === 'save_and_continue' || action === 'skip_and_continue') {
+
+    if (action === "save_and_continue" || action === "skip_and_continue") {
       // Advance current step
       newCurrentStep = Math.min(stepNumber + 1, maxSteps);
-      
+
       // Update highest completed step (only if moving forward for first time)
       if (stepNumber > newHighestCompleted) {
         newHighestCompleted = stepNumber;
@@ -188,40 +210,49 @@ const saveStepData = async (willId, stepNumber, stepData, userId, userRole, opti
       // User gets ONE edit session after paying, then locked again
       if (isPostPaymentEdit) {
         newEditUnlocked = false;
-        logger.info('Post-payment edit completed, locking edits', { willId, stepNumber });
+        logger.info("Post-payment edit completed, locking edits", {
+          willId,
+          stepNumber,
+        });
       }
       // NOTE: Before payment, NO locking - user can freely go back and edit
-    } else if (action === 'save_and_back') {
+    } else if (action === "save_and_back") {
       // Go back one step (but not below 1)
       newCurrentStep = Math.max(stepNumber - 1, 1);
-      
+
       // Update highest completed if this step wasn't completed before
       if (stepNumber > newHighestCompleted) {
         newHighestCompleted = stepNumber;
       }
-      
+
       // If post-payment edit, lock after saving (even when going back)
       if (isPostPaymentEdit) {
         newEditUnlocked = false;
-        logger.info('Post-payment edit completed (back), locking edits', { willId, stepNumber });
+        logger.info("Post-payment edit completed (back), locking edits", {
+          willId,
+          stepNumber,
+        });
       }
-    } else if (action === 'save') {
+    } else if (action === "save") {
       // Just save, don't change step
       // Update highest completed if needed
       if (stepNumber > newHighestCompleted) {
         newHighestCompleted = stepNumber;
       }
-      
+
       // If post-payment edit, lock after saving
       if (isPostPaymentEdit) {
         newEditUnlocked = false;
-        logger.info('Post-payment edit completed (save only), locking edits', { willId, stepNumber });
+        logger.info("Post-payment edit completed (save only), locking edits", {
+          willId,
+          stepNumber,
+        });
       }
     }
 
     // Update will
     const updatedWill = await trx
-      .updateTable('wills')
+      .updateTable("wills")
       .set({
         current_step: newCurrentStep,
         highest_completed_step: newHighestCompleted,
@@ -229,31 +260,31 @@ const saveStepData = async (willId, stepNumber, stepData, userId, userRole, opti
         edit_unlocked: newEditUnlocked,
         updated_at: new Date(),
       })
-      .where('id', '=', willId)
+      .where("id", "=", willId)
       .returning([
-        'id',
-        'will_type',
-        'marital_status',
-        'status',
-        'current_step',
-        'highest_completed_step',
-        'is_paid',
-        'edit_unlocked',
-        'updated_at',
+        "id",
+        "will_type",
+        "marital_status",
+        "status",
+        "current_step",
+        "highest_completed_step",
+        "is_paid",
+        "edit_unlocked",
+        "updated_at",
       ])
       .executeTakeFirst();
 
     return updatedWill;
   });
 
-  logger.info('Step data saved', { 
-    willId, 
-    stepNumber, 
-    action, 
+  logger.info("Step data saved", {
+    willId,
+    stepNumber,
+    action,
     newStep: result.current_step,
     highestCompleted: result.highest_completed_step,
     editUnlocked: result.edit_unlocked,
-    userId 
+    userId,
   });
 
   return result;
@@ -269,7 +300,7 @@ const unlockWillForEditing = async (willId, paymentId, userId, userRole) => {
   if (!will.is_paid) {
     // First time payment
     const updatedWill = await db
-      .updateTable('wills')
+      .updateTable("wills")
       .set({
         is_paid: true,
         paid_at: new Date(),
@@ -278,30 +309,33 @@ const unlockWillForEditing = async (willId, paymentId, userId, userRole) => {
         edit_count: 1,
         updated_at: new Date(),
       })
-      .where('id', '=', willId)
+      .where("id", "=", willId)
       .returningAll()
       .executeTakeFirst();
 
-    logger.info('Will unlocked for editing (first payment)', { willId, paymentId });
+    logger.info("Will unlocked for editing (first payment)", {
+      willId,
+      paymentId,
+    });
     return updatedWill;
   } else {
     // Subsequent payment for more edits
     const updatedWill = await db
-      .updateTable('wills')
+      .updateTable("wills")
       .set({
         payment_id: paymentId,
         edit_unlocked: true,
         edit_count: (will.edit_count || 0) + 1,
         updated_at: new Date(),
       })
-      .where('id', '=', willId)
+      .where("id", "=", willId)
       .returningAll()
       .executeTakeFirst();
 
-    logger.info('Will unlocked for editing (subsequent payment)', { 
-      willId, 
-      paymentId, 
-      editCount: updatedWill.edit_count 
+    logger.info("Will unlocked for editing (subsequent payment)", {
+      willId,
+      paymentId,
+      editCount: updatedWill.edit_count,
     });
     return updatedWill;
   }
@@ -311,7 +345,13 @@ const unlockWillForEditing = async (willId, paymentId, userId, userRole) => {
  * Save data for specific step
  * Routes to appropriate table based on step number
  */
-const saveStepSpecificData = async (trx, willId, stepNumber, stepData, will) => {
+const saveStepSpecificData = async (
+  trx,
+  willId,
+  stepNumber,
+  stepData,
+  will,
+) => {
   const isIslamic = will.will_type === WILL_TYPES.ISLAMIC;
 
   switch (stepNumber) {
@@ -397,7 +437,7 @@ const saveStepSpecificData = async (trx, willId, stepNumber, stepData, will) => 
 
     case 12: // SIGNING (Islamic only)
       if (!isIslamic) {
-        throw new BadRequestError('Invalid step for general will');
+        throw new BadRequestError("Invalid step for general will");
       }
       await saveSigningDetails(trx, willId, stepData);
       break;
@@ -407,7 +447,6 @@ const saveStepSpecificData = async (trx, willId, stepNumber, stepData, will) => 
   }
 };
 
-
 /**
  * Upsert testator (Step 1)
  * Also updates jurisdiction and marital_status on wills table if provided
@@ -415,10 +454,7 @@ const saveStepSpecificData = async (trx, willId, stepNumber, stepData, will) => 
 const upsertTestator = async (trx, willId, data) => {
   if (!data || Object.keys(data).length === 0) return;
 
-  const {
-    marital_status,
-    ...testatorData
-  } = data;
+  const { marital_status, ...testatorData } = data;
 
   /**
    * 1️⃣ Update WILL table (authoritative fields)
@@ -432,12 +468,12 @@ const upsertTestator = async (trx, willId, data) => {
 
   if (Object.keys(willUpdate).length > 0) {
     await trx
-      .updateTable('wills')
+      .updateTable("wills")
       .set({
         ...willUpdate,
         updated_at: new Date(),
       })
-      .where('id', '=', willId)
+      .where("id", "=", willId)
       .execute();
   }
 
@@ -447,23 +483,23 @@ const upsertTestator = async (trx, willId, data) => {
   if (Object.keys(testatorData).length === 0) return;
 
   const existing = await trx
-    .selectFrom('testators')
-    .select('id')
-    .where('will_id', '=', willId)
+    .selectFrom("testators")
+    .select("id")
+    .where("will_id", "=", willId)
     .executeTakeFirst();
 
   if (existing) {
     await trx
-      .updateTable('testators')
+      .updateTable("testators")
       .set({
         ...testatorData,
         updated_at: new Date(),
       })
-      .where('id', '=', existing.id)
+      .where("id", "=", existing.id)
       .execute();
   } else {
     await trx
-      .insertInto('testators')
+      .insertInto("testators")
       .values({
         id: generateUUID(),
         will_id: willId,
@@ -475,12 +511,11 @@ const upsertTestator = async (trx, willId, data) => {
   }
 };
 
-
 // Step 2  Executors
 const saveExecutors = async (trx, willId, data) => {
   if (!data?.executors) return;
 
-  await trx.deleteFrom('executors').where('will_id', '=', willId).execute();
+  await trx.deleteFrom("executors").where("will_id", "=", willId).execute();
 
   if (!data.executors.length) return;
 
@@ -503,232 +538,242 @@ const saveExecutors = async (trx, willId, data) => {
     updated_at: new Date(),
   }));
 
-  await trx.insertInto('executors').values(rows).execute();
+  await trx.insertInto("executors").values(rows).execute();
 };
 
 // Step 2 (Islamic) - Faith
-const saveIslamicFaith = async () => {}
+const saveIslamicFaith = async () => {};
 
 // Step 3 - Spouse
 const saveSpouse = async (trx, willId, data) => {
   if (!data) return;
 
-  const { is_spouse, spouse } = data;
+  const { is_spouse = false, spouse = [] } = data;
 
-  // Update wills table with is_spouse flag
-  await trx
-    .updateTable('wills')
-    .set({
-      is_spouse: is_spouse ?? false,
-      updated_at: new Date(),
-    })
-    .where('id', '=', willId)
-    .execute();
-
-  // If user says they have no spouse → delete all spouse records
+  // If user explicitly says no spouse → delete all spouse records
   if (!is_spouse) {
-    await trx
-      .deleteFrom('spouses')
-      .where('will_id', '=', willId)
-      .execute();
+    await trx.deleteFrom("spouses").where("will_id", "=", willId).execute();
     return;
   }
 
-  // If spouse array is empty or missing → nothing to save yet (draft)
-  if (!Array.isArray(spouse) || spouse.length === 0) {
-    return;
-  }
-
-  // Full replace strategy
-  await trx
-    .deleteFrom('spouses')
-    .where('will_id', '=', willId)
-    .execute();
-
-  const spouseRecords = spouse.map((s, index) => ({
-    id: s.id || generateUUID(),
-    will_id: willId,
-    title: s.title,
-    full_name: s.full_name,
-    building_number: s.building_number,
-    building_name: s.building_name,
-    street: s.street,
-    town: s.town,
-    city: s.city,
-    county: s.county,
-    postcode: s.postcode,
-    country: s.country,
-    phone_country_code: s.phone_country_code,
-    phone: s.phone,
-    date_of_birth: s.date_of_birth,
-    relationship_to_testator: s.relationship_to_testator,
-    order_index: index + 1,
-    created_at: new Date(),
-    updated_at: new Date(),
-  }));
+  await trx.deleteFrom("spouses").where("will_id", "=", willId).execute();
 
   await trx
-    .insertInto('spouses')
-    .values(spouseRecords)
+    .insertInto("spouses")
+    .values(
+      spouse.map((s, index) => ({
+        id: s.id || generateUUID(),
+        will_id: willId,
+        is_spouse: true,
+        title: s.title,
+        full_name: s.full_name,
+        building_number: s.building_number,
+        building_name: s.building_name,
+        street: s.street,
+        town: s.town,
+        city: s.city,
+        county: s.county,
+        postcode: s.postcode,
+        country: s.country,
+        phone_country_code: s.phone_country_code,
+        phone: s.phone,
+        date_of_birth: s.date_of_birth,
+        relationship_to_testator: s.relationship_to_testator,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
     .execute();
 };
 
 // Step 4 - Beneficiaries (children, guardians, trustees, charities)
-const saveChildren = async (trx, willId, children = []) => {
-  await trx.deleteFrom('children').where('will_id', '=', willId).execute();
+const saveChildren = async (trx, beneficiaryId, children = []) => {
+  await trx
+    .deleteFrom("children")
+    .where("beneficiary_id", "=", beneficiaryId)
+    .execute();
 
   if (!children.length) return;
 
-  await trx.insertInto('children').values(
-    children.map((c, index) => ({
-      id: c.id || generateUUID(),
-      will_id: willId,
-      title: c.title,
-      full_name: c.full_name,
-      gender: c.gender,
-      date_of_birth: c.date_of_birth,
-      relationship_to_testator: c.relationship_to_testator,
-      building_number: c.building_number,
-      building_name: c.building_name,
-      street: c.street,
-      town: c.town,
-      city: c.city,
-      county: c.county,
-      postcode: c.postcode,
-      country: c.country,
-      inheritance_age: c.inheritance_age,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }))
-  ).execute();
+  await trx
+    .insertInto("children")
+    .values(
+      children.map((c, index) => ({
+        id: c.id || generateUUID(),
+        beneficiary_id: beneficiaryId,
+        title: c.title,
+        full_name: c.full_name,
+        gender: c.gender,
+        date_of_birth: c.date_of_birth,
+        relationship_to_testator: c.relationship_to_testator,
+        building_number: c.building_number,
+        building_name: c.building_name,
+        street: c.street,
+        town: c.town,
+        city: c.city,
+        county: c.county,
+        postcode: c.postcode,
+        country: c.country,
+        inheritance_age: c.inheritance_age,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
 };
 
-const saveGuardians = async (trx, willId, guardians = []) => {
-  await trx.deleteFrom('guardians').where('will_id', '=', willId).execute();
+const saveGuardians = async (trx, beneficiaryId, guardians = []) => {
+  await trx
+    .deleteFrom("guardians")
+    .where("beneficiary_id", "=", beneficiaryId)
+    .execute();
 
   if (!guardians.length) return;
 
-  await trx.insertInto('guardians').values(
-    guardians.map((g, index) => ({
-      id: g.id || generateUUID(),
-      will_id: willId,
-      title: g.title,
-      full_name: g.full_name,
-      date_of_birth: g.date_of_birth,
-      relationship_to_testator: g.relationship_to_testator,
-      building_number: g.building_number,
-      building_name: g.building_name,
-      street: g.street,
-      town: g.town,
-      city: g.city,
-      county: g.county,
-      postcode: g.postcode,
-      country: g.country,
-      phone_country_code: g.phone_country_code,
-      phone: g.phone,
-      email: g.email,
-      is_alternate: g.is_alternate ?? false,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }))
-  ).execute();
+  await trx
+    .insertInto("guardians")
+    .values(
+      guardians.map((g, index) => ({
+        id: g.id || generateUUID(),
+        beneficiary_id: beneficiaryId,
+        title: g.title,
+        full_name: g.full_name,
+        date_of_birth: g.date_of_birth,
+        relationship_to_testator: g.relationship_to_testator,
+        building_number: g.building_number,
+        building_name: g.building_name,
+        street: g.street,
+        town: g.town,
+        city: g.city,
+        county: g.county,
+        postcode: g.postcode,
+        country: g.country,
+        phone_country_code: g.phone_country_code,
+        phone: g.phone,
+        email: g.email,
+        is_alternate: g.is_alternate ?? false,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
 };
 
-const saveTrustees = async (trx, willId, trustees = []) => {
-  await trx.deleteFrom('trustees').where('will_id', '=', willId).execute();
+const saveTrustees = async (trx, beneficiaryId, trustees = []) => {
+  await trx
+    .deleteFrom("trustees")
+    .where("beneficiary_id", "=", beneficiaryId)
+    .execute();
 
   if (!trustees.length) return;
 
-  await trx.insertInto('trustees').values(
-    trustees.map((t, index) => ({
-      id: t.id || generateUUID(),
-      will_id: willId,
-      role_type: t.role_type,
-      title: t.title,
-      full_name: t.full_name,
-      date_of_birth: t.date_of_birth,
-      relationship_to_testator: t.relationship_to_testator,
-      building_number: t.building_number,
-      building_name: t.building_name,
-      street: t.street,
-      town: t.town,
-      city: t.city,
-      county: t.county,
-      postcode: t.postcode,
-      country: t.country,
-      phone_country_code: t.phone_country_code,
-      phone: t.phone,
-      email: t.email,
-      include_all_general_powers: t.include_all_general_powers,
-      power_of_management: t.power_of_management,
-      power_of_investment: t.power_of_investment,
-      power_to_delegate: t.power_to_delegate,
-      power_in_relation_to_property: t.power_in_relation_to_property,
-      power_to_lend_and_borrow: t.power_to_lend_and_borrow,
-      power_to_apply_income_for_minors: t.power_to_apply_income_for_minors,
-      power_to_make_advancements: t.power_to_make_advancements,
-      power_to_appropriate_assets: t.power_to_appropriate_assets,
-      power_to_act_by_majority: t.power_to_act_by_majority,
-      power_to_charge: t.power_to_charge,
-      power_to_invest_in_non_interest_accounts: t.power_to_invest_in_non_interest_accounts,
-      additional_powers: t.additional_powers,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }))
-  ).execute();
+  await trx
+    .insertInto("trustees")
+    .values(
+      trustees.map((t, index) => ({
+        id: t.id || generateUUID(),
+        beneficiary_id: beneficiaryId,
+        role_type: t.role_type,
+        title: t.title,
+        full_name: t.full_name,
+        date_of_birth: t.date_of_birth,
+        relationship_to_testator: t.relationship_to_testator,
+        building_number: t.building_number,
+        building_name: t.building_name,
+        street: t.street,
+        town: t.town,
+        city: t.city,
+        county: t.county,
+        postcode: t.postcode,
+        country: t.country,
+        phone_country_code: t.phone_country_code,
+        phone: t.phone,
+        email: t.email,
+        include_all_general_powers: t.include_all_general_powers,
+        power_of_management: t.power_of_management,
+        power_of_investment: t.power_of_investment,
+        power_to_delegate: t.power_to_delegate,
+        power_in_relation_to_property: t.power_in_relation_to_property,
+        power_to_lend_and_borrow: t.power_to_lend_and_borrow,
+        power_to_apply_income_for_minors: t.power_to_apply_income_for_minors,
+        power_to_make_advancements: t.power_to_make_advancements,
+        power_to_appropriate_assets: t.power_to_appropriate_assets,
+        power_to_act_by_majority: t.power_to_act_by_majority,
+        power_to_charge: t.power_to_charge,
+        power_to_invest_in_non_interest_accounts:
+          t.power_to_invest_in_non_interest_accounts,
+        additional_powers: t.additional_powers,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
 };
 
-const saveBeneficiaries = async (trx, willId, beneficiaries = []) => {
-  await trx.deleteFrom('beneficiaries').where('will_id', '=', willId).execute();
+const saveBeneficiaries = async (trx, beneficiaryId, beneficiaries = []) => {
+  await trx
+    .deleteFrom("beneficiaries")
+    .where("beneficiary_id", "=", beneficiaryId)
+    .execute();
 
   if (!beneficiaries.length) return;
 
-  await trx.insertInto('beneficiaries').values(
-    beneficiaries.map((b, index) => ({
-      id: b.id || generateUUID(),
-      will_id: willId,
-      title: b.title,
-      full_name: b.full_name,
-      relationship_to_testator: b.relationship_to_testator,
-      city: b.city,
-      county: b.county,
-      postcode: b.postcode,
-      country: b.country,
-      phone_country_code: b.phone_country_code,
-      phone: b.phone,
-      email: b.email,
-      is_alternate: b.is_alternate ?? false,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }))
-  ).execute();
+  await trx
+    .insertInto("beneficiaries")
+    .values(
+      beneficiaries.map((b, index) => ({
+        id: b.id || generateUUID(),
+        beneficiary_id: beneficiaryId,
+        title: b.title,
+        full_name: b.full_name,
+        relationship_to_testator: b.relationship_to_testator,
+        city: b.city,
+        county: b.county,
+        postcode: b.postcode,
+        country: b.country,
+        phone_country_code: b.phone_country_code,
+        phone: b.phone,
+        email: b.email,
+        is_alternate: b.is_alternate ?? false,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
 };
 
-const saveCharities = async (trx, willId, charities = []) => {
-  await trx.deleteFrom('charities').where('will_id', '=', willId).execute();
+const saveCharities = async (trx, beneficiaryId, charities = []) => {
+  await trx
+    .deleteFrom("charities")
+    .where("beneficiary_id", "=", beneficiaryId)
+    .execute();
 
   if (!charities.length) return;
 
-  await trx.insertInto('charities').values(
-    charities.map((c, index) => ({
-      id: c.id || generateUUID(),
-      will_id: willId,
-      name: c.name,
-      registration_number: c.registration_number,
-      address: c.address,
-      gift_amount: c.gift_amount,
-      gift_percentage: c.gift_percentage,
-      gift_description: c.gift_description,
-      is_alternate: c.is_alternate ?? false,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }))
-  ).execute();
+  await trx
+    .insertInto("charities")
+    .values(
+      charities.map((c, index) => ({
+        id: c.id || generateUUID(),
+        beneficiary_id: beneficiaryId,
+        name: c.name,
+        registration_number: c.registration_number,
+        address: c.address,
+        gift_amount: c.gift_amount,
+        gift_percentage: c.gift_percentage,
+        gift_description: c.gift_description,
+        is_alternate: c.is_alternate ?? false,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
 };
 
 const saveBeneficiary = async (trx, willId, data) => {
@@ -742,58 +787,351 @@ const saveBeneficiary = async (trx, willId, data) => {
     trustees,
     beneficiaries,
     has_charity,
-    charities
+    charities,
   } = data;
 
-  // Update wills table with user-choice flags
-  await trx
-    .updateTable('wills')
-    .set({
-      have_children: have_children ?? false,
-      wants_backup: wants_backup ?? false,
-      has_charity: has_charity ?? false,
-      updated_at: new Date(),
-    })
-    .where('id', '=', willId)
-    .execute();
+  // Check if Exists
+  const existingBeneficiary = await trx
+    .selectFrom("beneficiary")
+    .select("id")
+    .where("will_id", "=", willId)
+    .executeTakeFirst();
 
-  // Save/Delete based on flags using consistent pattern
-  // TRUE = Save data | FALSE = Delete all records (user changed mind)
+  let beneficiaryId;
 
-  // 1️⃣ Children (controlled by have_children flag)
-  if (have_children) {
-    await saveChildren(trx, willId, children || []);
+  if (existingBeneficiary) {
+    // Update existing beneficiary
+    beneficiaryId = existingBeneficiary.id;
+
+    await trx
+      .updateTable("beneficiary")
+      .set({
+        have_children,
+        wants_backup,
+        has_charity,
+        updated_at: new Date(),
+      })
+      .where("id", "=", beneficiaryId)
+      .execute();
   } else {
-    await saveChildren(trx, willId, []); // Deletes all
+    // Insert new beneficiary
+    beneficiaryId = generateUUID();
+
+    await trx
+      .insertInto("beneficiary")
+      .values({
+        id: beneficiaryId,
+        will_id: willId,
+        have_children,
+        wants_backup,
+        has_charity,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .execute();
   }
 
-  // 2️⃣ Guardians (only relevant if have_children = true, delete when no children)
+  // Children + Guardians
   if (have_children) {
-    await saveGuardians(trx, willId, guardians || []);
+    await saveChildren(trx, beneficiaryId, children);
+    await saveGuardians(trx, beneficiaryId, guardians);
   } else {
-    await saveGuardians(trx, willId, []); // Deletes all guardians when no children
+    await saveChildren(trx, beneficiaryId, []);
+    await saveGuardians(trx, beneficiaryId, []);
   }
 
-  // 3️⃣ Trustees (backup) (controlled by wants_backup flag)
+  // Trustees
   if (wants_backup) {
-    await saveTrustees(trx, willId, trustees || []);
+    await saveTrustees(trx, beneficiaryId, trustees);
   } else {
-    await saveTrustees(trx, willId, []); // Deletes all
+    await saveTrustees(trx, beneficiaryId, []);
   }
 
-  // 4️⃣ Beneficiaries (always saved - independent of other flags)
-  await saveBeneficiaries(trx, willId, beneficiaries || []);
+  // Beneficiaries (always saved)
+  await saveBeneficiaries(trx, beneficiaryId, beneficiaries);
 
-  // 5️⃣ Charities (controlled by has_charity flag)
+  // Charities
   if (has_charity) {
-    await saveCharities(trx, willId, charities || []);
+    await saveCharities(trx, beneficiaryId, charities);
   } else {
-    await saveCharities(trx, willId, []); // Deletes all
+    await saveCharities(trx, beneficiaryId, []);
   }
 };
 
-// Step 5 - Assets
-const saveAssets = async () => {};
+// Step 5 - Assets (property, bank accounts, investments, digital assets, intellectual assets, valuable items)
+const savePropertyAssets = async (trx, assetsId, properties = []) => {
+  await trx
+    .deleteFrom("property_assets")
+    .where("assets_id", "=", assetsId)
+    .execute();
+
+  if (!properties.length) return;
+
+  await trx
+    .insertInto("property_assets")
+    .values(
+      properties.map((p, index) => {
+        const isMortgage = p.is_mortgage === true;
+
+        return {
+          id: p.id || generateUUID(),
+          assets_id: assetsId,
+
+          building_number: p.building_number,
+          building_name: p.building_name,
+          street: p.street,
+          town: p.town,
+          county: p.county,
+          postcode: p.postcode,
+          country: p.country,
+          ownership_type: p.ownership_type,
+          estimated_value: p.estimated_value,
+          account_location: p.account_location,
+          is_mortgage: isMortgage,
+          lender_name: isMortgage ? p.lender_name : null,
+          note: isMortgage ? p.note : null,
+          order_index: index + 1,
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+      }),
+    )
+    .execute();
+};
+
+const saveBankAccounts = async (trx, assetsId, bank_accounts) => {
+  await trx
+    .deleteFrom("bank_accounts")
+    .where("assets_id", "=", assetsId)
+    .execute();
+
+  if (!bank_accounts.length) return;
+
+  await trx
+    .insertInto("bank_accounts")
+    .values(
+      bank_accounts.map((b, index) => ({
+        id: b.id || generateUUID(),
+        assets_id: assetsId,
+        bank_name: b.bank_name,
+        account_type: b.account_type,
+        account_number: b.account_number,
+        account_location: b.account_location,
+        additional_information: b.additional_information,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
+};
+
+const saveInvestments = async (trx, assetsId, investments) => {
+  await trx
+    .deleteFrom("investments")
+    .where("assets_id", "=", assetsId)
+    .execute();
+
+  if (!investments.length) return;
+
+  await trx
+    .insertInto("investments")
+    .values(
+      investments.map((i, index) => ({
+        id: i.id || generateUUID(),
+        assets_id: assetsId,
+        company_or_fund_name: i.company_or_fund_name,
+        investment_type: i.investment_type,
+        account_or_policy_number: i.account_or_policy_number,
+        managed_by: i.managed_by,
+        additional_information: i.additional_information,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
+};
+
+const saveValuableItems = async (trx, assetsId, valuable_items) => {
+  await trx
+    .deleteFrom("valuable_items")
+    .where("assets_id", "=", assetsId)
+    .execute();
+
+  if (!valuable_items.length) return;
+
+  await trx
+    .insertInto("valuable_items")
+    .values(
+      valuable_items.map((v, index) => ({
+        id: v.id || generateUUID(),
+        assets_id: assetsId,
+        category: v.category,
+        description: v.description,
+        location: v.location,
+        additional_information: v.additional_information,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
+};
+
+const saveDigitalAssets = async (trx, assetsId, digital_assets) => {
+  await trx
+    .deleteFrom("digital_assets")
+    .where("assets_id", "=", assetsId)
+    .execute();
+
+  if (!digital_assets.length) return;
+
+  await trx
+    .insertInto("digital_assets")
+    .values(
+      digital_assets.map((d, index) => ({
+        id: d.id || generateUUID(),
+        assets_id: assetsId,
+        asset_type: d.asset_type,
+        platform: d.platform,
+        account_id: d.account_id,
+        additional_information: d.additional_information,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
+};
+
+const saveIntellectualAssets = async (trx, assetsId, intellectual_assets) => {
+  await trx
+    .deleteFrom("intellectual_assets")
+    .where("assets_id", "=", assetsId)
+    .execute();
+
+  if (!intellectual_assets.length) return;
+
+  await trx
+    .insertInto("intellectual_assets")
+    .values(
+      intellectual_assets.map((i, index) => ({
+        id: i.id || generateUUID(),
+        assets_id: assetsId,
+        asset_type: i.asset_type,
+        title: i.title,
+        description: i.description,
+        status: i.status,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
+};
+
+const saveAssets = async (trx, willId, data) => {
+  if (!data) return;
+
+  const {
+    has_property,
+    properties,
+    has_bank_account,
+    bank_accounts,
+    has_investment,
+    investments,
+    has_valuable_item,
+    valuable_items,
+    has_digital_asset,
+    digital_assets,
+    has_intellectual_asset,
+    intellectual_assets,
+  } = data;
+
+  // Check If Exists
+  const existingAssets = await trx
+    .selectFrom("assets")
+    .select("id")
+    .where("will_id", "=", willId)
+    .executeTakeFirst();
+
+  let assetsId;
+
+  if (existingAssets) {
+    // Update existing assets
+    assetsId = existingAssets.id;
+
+    await trx
+      .updateTable("assets")
+      .set({
+        has_property,
+        has_bank_account,
+        has_investment,
+        has_valuable_item,
+        has_digital_asset,
+        has_intellectual_asset,
+        updated_at: new Date(),
+      })
+      .where("id", "=", assetsId)
+      .execute();
+  } else {
+    // Insert new assets row
+    assetsId = generateUUID();
+
+    await trx
+      .insertInto("assets")
+      .values({
+        id: assetsId,
+        will_id: willId,
+        has_property,
+        has_bank_account,
+        has_investment,
+        has_valuable_item,
+        has_digital_asset,
+        has_intellectual_asset,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .execute();
+  }
+
+  if (has_property) {
+    await savePropertyAssets(trx, assetsId, properties);
+  } else {
+    await savePropertyAssets(trx, assetsId, []);
+  }
+
+  if (has_bank_account) {
+    await saveBankAccounts(trx, assetsId, bank_accounts);
+  } else {
+    await saveBankAccounts(trx, assetsId, []);
+  }
+
+  if (has_investment) {
+    await saveInvestments(trx, assetsId, investments);
+  } else {
+    await saveInvestments(trx, assetsId, []);
+  }
+
+  if (has_valuable_item) {
+    await saveValuableItems(trx, assetsId, valuable_items);
+  } else {
+    await saveValuableItems(trx, assetsId, []);
+  }
+
+  if (has_digital_asset) {
+    await saveDigitalAssets(trx, assetsId, digital_assets);
+  } else {
+    await saveDigitalAssets(trx, assetsId, []);
+  }
+
+  if (has_intellectual_asset) {
+    await saveIntellectualAssets(trx, assetsId, intellectual_assets);
+  } else {
+    await saveIntellectualAssets(trx, assetsId, []);
+  }
+};
 
 // Step 6 - Debts
 const saveDebts = async () => {};
@@ -834,16 +1172,16 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
     // STEP 1 — TESTATOR
     case 1: {
       const testator = await db
-        .selectFrom('testators')
+        .selectFrom("testators")
         .selectAll()
-        .where('will_id', '=', willId)
+        .where("will_id", "=", willId)
         .executeTakeFirst();
 
       data = {
         ...testator,
         marital_status: testator?.marital_status ?? will.marital_status,
-        jurisdiction_country: testator?.jurisdiction_country ?? will.jurisdiction_country,
-        jurisdiction_region: testator?.jurisdiction_region ?? will.jurisdiction_region,
+        jurisdiction_country: testator?.jurisdiction_country,
+        jurisdiction_region: testator?.jurisdiction_region,
       };
       break;
     }
@@ -852,17 +1190,17 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
     case 2: {
       if (isIslamic) {
         data = await db
-          .selectFrom('islamic_faith')
+          .selectFrom("islamic_faith")
           .selectAll()
-          .where('will_id', '=', willId)
+          .where("will_id", "=", willId)
           .executeTakeFirst();
       } else {
         data = {
           executors: await db
-            .selectFrom('executors')
+            .selectFrom("executors")
             .selectAll()
-            .where('will_id', '=', willId)
-            .orderBy('order_index')
+            .where("will_id", "=", willId)
+            .orderBy("order_index")
             .execute(),
         };
       }
@@ -874,22 +1212,22 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
       if (isIslamic) {
         data = {
           executors: await db
-            .selectFrom('executors')
+            .selectFrom("executors")
             .selectAll()
-            .where('will_id', '=', willId)
-            .orderBy('order_index')
+            .where("will_id", "=", willId)
+            .orderBy("order_index")
             .execute(),
         };
       } else {
         const spouse = await db
-          .selectFrom('spouses')
+          .selectFrom("spouses")
           .selectAll()
-          .where('will_id', '=', willId)
-          .orderBy('order_index')
+          .where("will_id", "=", willId)
+          .orderBy("order_index")
           .execute();
 
         data = {
-          is_spouse: will.is_spouse ?? false,
+          is_spouse: spouse.some((s) => s.is_spouse === true),
           spouse,
         };
       }
@@ -900,65 +1238,278 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
     case 4: {
       if (isIslamic) {
         const spouse = await db
-          .selectFrom('spouses')
+          .selectFrom("spouses")
           .selectAll()
-          .where('will_id', '=', willId)
-          .orderBy('order_index')
+          .where("will_id", "=", willId)
+          .orderBy("order_index")
           .execute();
 
         data = {
-          is_spouse: will.is_spouse ?? false,
+          is_spouse: spouse.some((s) => s.is_spouse === true),
           spouse,
         };
       } else {
-        const children = await db.selectFrom('children').selectAll().where('will_id', '=', willId).execute();
-        const guardians = await db.selectFrom('guardians').selectAll().where('will_id', '=', willId).execute();
-        const trustees = await db.selectFrom('trustees').selectAll().where('will_id', '=', willId).execute();
-        const beneficiaries = await db.selectFrom('beneficiaries').selectAll().where('will_id', '=', willId).execute();
-        const charities = await db.selectFrom('charities').selectAll().where('will_id', '=', willId).execute();
+        const beneficiary = await db
+          .selectFrom("beneficiary")
+          .select(["id", "have_children", "wants_backup", "has_charity"])
+          .where("will_id", "=", willId)
+          .executeTakeFirst();
+
+        let children = [],
+          guardians = [],
+          trustees = [],
+          beneficiaries = [],
+          charities = [];
+
+        if (beneficiary) {
+          children = await db
+            .selectFrom("children")
+            .selectAll()
+            .where("beneficiary_id", "=", beneficiary.id)
+            .orderBy("order_index")
+            .execute();
+          guardians = await db
+            .selectFrom("guardians")
+            .selectAll()
+            .where("beneficiary_id", "=", beneficiary.id)
+            .orderBy("order_index")
+            .execute();
+          trustees = await db
+            .selectFrom("trustees")
+            .selectAll()
+            .where("beneficiary_id", "=", beneficiary.id)
+            .orderBy("order_index")
+            .execute();
+          beneficiaries = await db
+            .selectFrom("beneficiaries")
+            .selectAll()
+            .where("beneficiary_id", "=", beneficiary.id)
+            .orderBy("order_index")
+            .execute();
+          charities = await db
+            .selectFrom("charities")
+            .selectAll()
+            .where("beneficiary_id", "=", beneficiary.id)
+            .orderBy("order_index")
+            .execute();
+        }
 
         data = {
-          have_children: will.have_children ?? false,
+          have_children: beneficiary.have_children ?? false,
           children,
           guardians,
-          wants_backup: will.wants_backup ?? false,
+          wants_backup: beneficiary.wants_backup ?? false,
           trustees,
           beneficiaries,
-          has_charity: will.has_charity ?? false,
+          has_charity: beneficiary.has_charity ?? false,
           charities,
         };
       }
       break;
     }
-
     // STEP 5 — GENERAL: ASSETS | ISLAMIC: BENEFICIARY BUNDLE
     case 5: {
       if (isIslamic) {
-        const children = await db.selectFrom('children').selectAll().where('will_id', '=', willId).execute();
-        const guardians = await db.selectFrom('guardians').selectAll().where('will_id', '=', willId).execute();
-        const trustees = await db.selectFrom('trustees').selectAll().where('will_id', '=', willId).execute();
-        const beneficiaries = await db.selectFrom('beneficiaries').selectAll().where('will_id', '=', willId).execute();
-        const charities = await db.selectFrom('charities').selectAll().where('will_id', '=', willId).execute();
+        // Get beneficiary record first, then query child tables
+        const beneficiary = await db
+          .selectFrom("beneficiary")
+          .select(["id", "have_children", "wants_backup", "has_charity"])
+          .where("will_id", "=", willId)
+          .executeTakeFirst();
+
+        let children = [],
+          guardians = [],
+          trustees = [],
+          beneficiaries = [],
+          charities = [];
+        if (beneficiary) {
+          children = await db
+            .selectFrom("children")
+            .selectAll()
+            .where("beneficiary_id", "=", beneficiary.id)
+            .orderBy("order_index")
+            .execute();
+          guardians = await db
+            .selectFrom("guardians")
+            .selectAll()
+            .where("beneficiary_id", "=", beneficiary.id)
+            .orderBy("order_index")
+            .execute();
+          trustees = await db
+            .selectFrom("trustees")
+            .selectAll()
+            .where("beneficiary_id", "=", beneficiary.id)
+            .orderBy("order_index")
+            .execute();
+          beneficiaries = await db
+            .selectFrom("beneficiaries")
+            .selectAll()
+            .where("beneficiary_id", "=", beneficiary.id)
+            .orderBy("order_index")
+            .execute();
+          charities = await db
+            .selectFrom("charities")
+            .selectAll()
+            .where("beneficiary_id", "=", beneficiary.id)
+            .orderBy("order_index")
+            .execute();
+        }
 
         data = {
-          have_children: will.have_children ?? false,
+          have_children: beneficiary.have_children ?? false,
           children,
           guardians,
-          wants_backup: will.wants_backup ?? false,
+          wants_backup: beneficiary.wants_backup ?? false,
           trustees,
           beneficiaries,
-          has_charity: will.has_charity ?? false,
+          has_charity: beneficiary.has_charity ?? false,
           charities,
         };
       } else {
-        data = { assets: [] }; // table not implemented yet
+        // Get assets record first, then query child tables
+        const assets = await db
+          .selectFrom("assets")
+          .select([
+            "id",
+            "has_property",
+            "has_bank_account",
+            "has_investment",
+            "has_valuable_item",
+            "has_digital_asset",
+            "has_intellectual_asset",
+          ])
+          .where("will_id", "=", willId)
+          .executeTakeFirst();
+
+        if (assets) {
+          const properties = await db
+            .selectFrom("property_assets")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+          const bank_accounts = await db
+            .selectFrom("bank_accounts")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+          const investments = await db
+            .selectFrom("investments")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+          const valuable_items = await db
+            .selectFrom("valuable_items")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+          const digital_assets = await db
+            .selectFrom("digital_assets")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+          const intellectual_assets = await db
+            .selectFrom("intellectual_assets")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+
+          data = {
+            has_property: assets.has_property ?? false,
+            properties,
+            has_bank_account: assets.has_bank_account ?? false,
+            bank_accounts,
+            has_investment: assets.has_investment ?? false,
+            investments,
+            has_valuable_item: assets.has_valuable_item ?? false,
+            valuable_items,
+            has_digital_asset: assets.has_digital_asset ?? false,
+            digital_assets,
+            has_intellectual_asset: assets.has_intellectual_asset ?? false,
+            intellectual_assets,
+          };
+        }
       }
       break;
     }
 
     // STEP 6 — ASSETS (Islamic) | DEBTS (General)
     case 6:
-      data = {};
+      if (isIslamic) {
+        // Get assets record first, then query child tables
+        const assets = await db
+          .selectFrom("assets")
+          .select([
+            "id",
+            "has_property",
+            "has_bank_account",
+            "has_investment",
+            "has_valuable_item",
+            "has_digital_asset",
+            "has_intellectual_asset",
+          ])
+          .where("will_id", "=", willId)
+          .executeTakeFirst();
+
+        if (assets) {
+          const properties = await db
+            .selectFrom("property_assets")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+          const bank_accounts = await db
+            .selectFrom("bank_accounts")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+          const investments = await db
+            .selectFrom("investments")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+          const valuable_items = await db
+            .selectFrom("valuable_items")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+          const digital_assets = await db
+            .selectFrom("digital_assets")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+          const intellectual_assets = await db
+            .selectFrom("intellectual_assets")
+            .selectAll()
+            .where("assets_id", "=", assets.id)
+            .orderBy("order_index")
+            .execute();
+
+          data = {
+            has_property: assets?.has_property ?? false,
+            properties,
+            has_bank_account: assets?.has_bank_account ?? false,
+            bank_accounts,
+            has_investment: assets?.has_investment ?? false,
+            investments,
+            has_valuable_item: assets?.has_valuable_item ?? false,
+            valuable_items,
+            has_digital_asset: assets?.has_digital_asset ?? false,
+            digital_assets,
+            has_intellectual_asset: assets?.has_intellectual_asset ?? false,
+            intellectual_assets,
+          };
+        }
+      }
       break;
 
     // STEP 7 — DEBTS (Islamic) | GIFTS (General)
@@ -983,10 +1534,10 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
       } else {
         data = {
           witnesses: await db
-            .selectFrom('witnesses')
+            .selectFrom("witnesses")
             .selectAll()
-            .where('will_id', '=', willId)
-            .orderBy('order_index')
+            .where("will_id", "=", willId)
+            .orderBy("order_index")
             .execute(),
         };
       }
@@ -997,10 +1548,10 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
       if (isIslamic) {
         data = {
           witnesses: await db
-            .selectFrom('witnesses')
+            .selectFrom("witnesses")
             .selectAll()
-            .where('will_id', '=', willId)
-            .orderBy('order_index')
+            .where("will_id", "=", willId)
+            .orderBy("order_index")
             .execute(),
         };
       } else {
@@ -1033,7 +1584,6 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
     },
   };
 };
-
 
 /**
  * Get all steps status for progress bar
@@ -1072,7 +1622,6 @@ const getAllStepsStatus = async (willId, userId, userRole) => {
     },
   };
 };
-
 
 module.exports = {
   saveStepData,

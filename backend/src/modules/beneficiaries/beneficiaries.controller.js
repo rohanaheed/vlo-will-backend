@@ -1,7 +1,7 @@
 const beneficiariesService = require('./beneficiaries.service');
 const { sendSuccess } = require('../../utils/response');
 
-// Children CONTROLLERS
+// Children CONTROLLER
 const getChildren = async (req, res, next) => {
   try {
     const children = await beneficiariesService.getChildren(
@@ -92,7 +92,7 @@ const reorderChildren = async (req, res, next) => {
   }
 };
 
-// Guardians CONTROLLERS
+// Guardians CONTROLLER
 const getGuardians = async (req, res, next) => {
   try {
     const guardians = await beneficiariesService.getGuardians(
@@ -183,7 +183,7 @@ const reorderGuardians = async (req, res, next) => {
   }
 };
 
-// Trustees CONTROLLERS
+// Trustees CONTROLLER
 const getTrustees = async (req, res, next) => {
   try {
     const trustees = await beneficiariesService.getTrustees(
@@ -274,7 +274,7 @@ const reorderTrustees = async (req, res, next) => {
   }
 };
 
-// Beneficiaries CONTROLLERS
+// Beneficiaries CONTROLLER
 const getBeneficiaries = async (req, res, next) => {
   try {
     const beneficiaries = await beneficiariesService.getBeneficiaries(
@@ -365,7 +365,7 @@ const reorderBeneficiaries = async (req, res, next) => {
   }
 };
 
-// Charities CONTROLLERS
+// Charities CONTROLLER
 const getCharities = async (req, res, next) => {
   try {
     const charities = await beneficiariesService.getCharities(

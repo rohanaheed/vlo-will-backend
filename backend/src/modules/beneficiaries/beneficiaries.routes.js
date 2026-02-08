@@ -8,7 +8,7 @@ const beneficiariesValidation = require('./beneficiaries.validation');
 // Children ROUTES
 router.get('/children',validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.getChildren);
 
-router.get('/children/:childId', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.getChildById);
+router.get('/children/:childId', validate(beneficiariesValidation.childIdParamSchema), beneficiariesCtrl.getChildById);
 
 router.post(
   '/children',
@@ -22,7 +22,7 @@ router.put(
   beneficiariesCtrl.updateChild
 );
 
-router.delete('/children/:childId', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.deleteChild);
+router.delete('/children/:childId', validate(beneficiariesValidation.childIdParamSchema), beneficiariesCtrl.deleteChild);
 
 router.post(
   '/children/reorder',
@@ -33,7 +33,7 @@ router.post(
 // Guardians ROUTES
 router.get('/guardians', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.getGuardians);
 
-router.get('/guardians/:guardianId', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.getGuardianById);
+router.get('/guardians/:guardianId', validate(beneficiariesValidation.guardianIdParamSchema), beneficiariesCtrl.getGuardianById);
 
 router.post(
   '/guardians',
@@ -47,7 +47,7 @@ router.put(
   beneficiariesCtrl.updateGuardian
 );
 
-router.delete('/guardians/:guardianId', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.deleteGuardian);
+router.delete('/guardians/:guardianId', validate(beneficiariesValidation.guardianIdParamSchema), beneficiariesCtrl.deleteGuardian);
 
 router.post(
   '/guardians/reorder',
@@ -58,7 +58,7 @@ router.post(
 // Trustees ROUTES
 router.get('/trustees', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.getTrustees);
 
-router.get('/trustees/:trusteeId', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.getTrusteeById);
+router.get('/trustees/:trusteeId', validate(beneficiariesValidation.trusteeIdParamSchema), beneficiariesCtrl.getTrusteeById);
 
 router.post(
   '/trustees',
@@ -72,7 +72,7 @@ router.put(
   beneficiariesCtrl.updateTrustee
 );
 
-router.delete('/trustees/:trusteeId', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.deleteTrustee);
+router.delete('/trustees/:trusteeId', validate(beneficiariesValidation.trusteeIdParamSchema), beneficiariesCtrl.deleteTrustee);
 
 router.post(
   '/trustees/reorder',
@@ -83,7 +83,7 @@ router.post(
 // Beneficiaries ROUTES
 router.get('/beneficiaries', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.getBeneficiaries);
 
-router.get('/beneficiaries/:beneficiaryId', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.getBeneficiaryById);
+router.get('/beneficiaries/:beneficiaryId', validate(beneficiariesValidation.beneficiaryIdParamSchema), beneficiariesCtrl.getBeneficiaryById);
 
 router.post(
   '/beneficiaries',
@@ -97,7 +97,7 @@ router.put(
   beneficiariesCtrl.updateBeneficiary
 );
 
-router.delete('/beneficiaries/:beneficiaryId', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.deleteBeneficiary);
+router.delete('/beneficiaries/:beneficiaryId', validate(beneficiariesValidation.beneficiaryIdParamSchema), beneficiariesCtrl.deleteBeneficiary);
 
 router.post(
   '/beneficiaries/reorder',
@@ -108,7 +108,7 @@ router.post(
 // Charities ROUTES
 router.get('/charities', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.getCharities);
 
-router.get('/charities/:charityId', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.getCharityById);
+router.get('/charities/:charityId', validate(beneficiariesValidation.charityIdParamSchema), beneficiariesCtrl.getCharityById);
 
 router.post(
   '/charities',
@@ -122,7 +122,7 @@ router.put(
   beneficiariesCtrl.updateCharity
 );
 
-router.delete('/charities/:charityId', validate(beneficiariesValidation.willIdParamSchema), beneficiariesCtrl.deleteCharity);
+router.delete('/charities/:charityId', validate(beneficiariesValidation.charityIdParamSchema), beneficiariesCtrl.deleteCharity);
 
 router.post(
   '/charities/reorder',
