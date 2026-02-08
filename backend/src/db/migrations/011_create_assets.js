@@ -1,6 +1,4 @@
-/**
- * Migration: Create assets table
- */
+// Migration Assets Table
 
 const { sql } = require('kysely');
 
