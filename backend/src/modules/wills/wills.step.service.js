@@ -1134,7 +1134,36 @@ const saveAssets = async (trx, willId, data) => {
 };
 
 // Step 6 - Debts
-const saveDebts = async () => {};
+const saveDebts = async (trx, willId, data) => {
+if (!data) return;
+
+  const { is_debtor = false, debts = [] } = data;
+
+  // If NO then delete all debts records according to will id
+  if (!is_debtor) {
+    await trx.deleteFrom("debts").where("will_id", "=", willId).execute();
+    return;
+  }
+
+  await trx.deleteFrom("debts").where("will_id", "=", willId).execute();
+
+  await trx
+    .insertInto("debts")
+    .values(
+      debts.map((s, index) => ({
+        id: s.id || generateUUID(),
+        will_id: willId,
+        creditor_name: s.creditor_name,
+        type_of_debt: s.type_of_debt,
+        amount: s.outstanding_balance,
+        additional_information: s.additional_information,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
+};
 
 // Step 7 Gifts (General) and Step 8 Gifts - (Islamic)
 const saveGifts = async () => {};
@@ -1307,10 +1336,10 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
       }
       break;
     }
-    // STEP 5 — GENERAL: ASSETS | ISLAMIC: BENEFICIARY BUNDLE
+    // STEP 5 — GENERAL: ASSETS | ISLAMIC: BENEFICIARY
     case 5: {
       if (isIslamic) {
-        // Get beneficiary record first, then query child tables
+        // Get beneficiary
         const beneficiary = await db
           .selectFrom("beneficiary")
           .select(["id", "have_children", "wants_backup", "has_charity"])
@@ -1366,7 +1395,7 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
           charities,
         };
       } else {
-        // Get assets record first, then query child tables
+        // Get assets
         const assets = await db
           .selectFrom("assets")
           .select([
@@ -1509,6 +1538,15 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
             intellectual_assets,
           };
         }
+      } else {
+        const debts = await db
+          .selectFrom("debts")
+          .selectAll()
+          .where("will_id", "=", willId)
+          .orderBy("order_index")
+          .execute();
+        const is_debtor = debts.length > 0;  
+        data = { is_debtor, debts };
       }
       break;
 

@@ -263,10 +263,14 @@ const step5Schema = z.object({
 // STEP 6: LIABILITIES
 const debtsSchema = z.object({
   id: uuidSchema.optional().nullable(),
-  type: z.enum(['mortgage', 'loan', 'credit_card', 'other']).optional(),
+  creditor_name: z.string().max(255).optional().nullable(),
+  type_of_debt: z.string().max(100).optional().nullable(),
+  outstanding_balance: z.number().min(0).optional().nullable(),
+  additional_information: z.string().max(1000).optional().nullable()
 }).passthrough();
 
 const step6Schema = z.object({
+  is_debtor: z.boolean().optional().default(false),
   debts: z.array(debtsSchema).optional().default([]),
 }).passthrough();
 

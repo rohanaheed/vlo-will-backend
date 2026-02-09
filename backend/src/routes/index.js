@@ -11,6 +11,7 @@ const executorsRoutes = require('../modules/executors/executors.routes');
 const spousesRoutes = require('../modules/spouses/spouses.routes');
 const beneficiariesRoutes = require('../modules/beneficiaries/beneficiaries.routes');
 const assetsRoutes = require('../modules/assets/assets.routes');
+const debtsRoutes = require('../modules/debts/debts.route');
 
 const router = express.Router();
 
@@ -57,11 +58,12 @@ router.use(`${API_PREFIX}/permissions`, permissionsRoutes);
 router.use(`${API_PREFIX}/wills`, willsRoutes);
 
 // Legacy individual endpoints (still available for granular operations)
-router.use(`${API_PREFIX}/wills/:willId/testator`, testatorsRoutes);
+router.use(`${API_PREFIX}/wills/:willId/testators`, testatorsRoutes);
 router.use(`${API_PREFIX}/wills/:willId/executors`, executorsRoutes);
-router.use(`${API_PREFIX}/wills/:willId/spouse`, spousesRoutes);
-router.use(`${API_PREFIX}/wills/:willId/beneficiaries`, beneficiariesRoutes);
+router.use(`${API_PREFIX}/wills/:willId/spouses`, spousesRoutes);
+router.use(`${API_PREFIX}/wills/:willId/beneficiary`, beneficiariesRoutes);
 router.use(`${API_PREFIX}/wills/:willId/assets`, assetsRoutes);
+router.use(`${API_PREFIX}/wills/:willId/debts`, debtsRoutes);
 
 // Admin routes
 // router.use(`${API_PREFIX}/admin`, adminRoutes);

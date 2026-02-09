@@ -7,37 +7,37 @@ const spousesValidation = require('./spouses.validation');
 
 // SPOUSES ROUTES
 router.get(
-  '/spouses',
+  '/',
   validate(spousesValidation.willIdParamSchema),
   spousesCtrl.getSpouses
 );
 
 router.get(
-  '/spouses/:spouseId',
+  '/:spouseId',
   validate(spousesValidation.spouseIdParamSchema),
   spousesCtrl.getSpouseById
 );
 
 router.post(
-  '/spouses',
+  '/',
   validate(spousesValidation.createSpouseSchema),
   spousesCtrl.createSpouse
 );
 
 router.put(
-  '/spouses/:spouseId',
+  '/:spouseId',
   validate(spousesValidation.updateSpouseSchema),
   spousesCtrl.updateSpouse
 );
 
 router.delete(
-  '/spouses/:spouseId',
+  '/:spouseId',
   validate(spousesValidation.spouseIdParamSchema),
   spousesCtrl.deleteSpouse
 );
 
 router.post(
-  '/spouses/reorder',
+  '/reorder',
   validate(spousesValidation.reorderSpousesSchema),
   spousesCtrl.reorderSpouses
 );
