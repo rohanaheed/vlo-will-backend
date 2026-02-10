@@ -3,6 +3,7 @@ const { z } = require('zod');
 const registerSchema = {
   body: z.object({
     email: z.string().email('Invalid email address').toLowerCase().trim(),
+    name: z.string().min(1, 'Name is required').max(100).trim(),
     password: z
       .string()
       .min(8, 'Password must be at least 8 characters')
@@ -10,9 +11,6 @@ const registerSchema = {
         /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
         'Password must contain uppercase, lowercase, number and special character'
       ),
-    first_name: z.string().min(1, 'First name is required').max(100).trim(),
-    last_name: z.string().min(1, 'Last name is required').max(100).trim(),
-    phone: z.string().max(20).optional(),
   }),
 };
 

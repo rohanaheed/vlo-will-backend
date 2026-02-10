@@ -13,7 +13,7 @@ const SALT_ROUNDS = 12;
 /**
  * Register a new user
  */
-const register = async ({ email, password, first_name, last_name, phone }) => {
+const register = async ({ email, password, name }) => {
   // Check if user already exists
   const existingUser = await db
     .selectFrom('users')
@@ -36,9 +36,7 @@ const register = async ({ email, password, first_name, last_name, phone }) => {
       id: userId,
       email,
       password_hash: passwordHash,
-      first_name,
-      last_name,
-      phone,
+      name,
       role_id: ROLE_IDS.USER,
       is_active: true,
       is_email_verified: false,
@@ -48,9 +46,7 @@ const register = async ({ email, password, first_name, last_name, phone }) => {
     .returning([
       'id',
       'email',
-      'first_name',
-      'last_name',
-      'phone',
+      'name',
       'is_active',
       'is_email_verified',
       'created_at',
@@ -82,7 +78,7 @@ const register = async ({ email, password, first_name, last_name, phone }) => {
     subject: 'Verify Your Email Address',
     html: `
       <h1>Welcome to Will-Be!</h1>
-      <p>Hi ${user.first_name},</p>
+      <p>Hi ${user.name},</p>
       <p>Thank you for registering. Please verify your email address to activate your account:</p>
       <a href="${verificationLink}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">
         Verify Email
@@ -91,7 +87,7 @@ const register = async ({ email, password, first_name, last_name, phone }) => {
       <p>This link expires in 24 hours.</p>
       <p>If you didn't create this account, you can ignore this email.</p>
     `,
-    text: `Hi ${user.first_name}, Verify your email here: ${verificationLink}`,
+    text: `Hi ${user.name}, Verify your email here: ${verificationLink}`,
   });
 
   logger.info('Email verification token sent', { userId: user.id, email });
@@ -131,9 +127,7 @@ const login = async (user) => {
     .select([
       'users.id',
       'users.email',
-      'users.first_name',
-      'users.last_name',
-      'users.phone',
+      'users.name',
       'users.is_active',
       'users.is_email_verified',
       'users.created_at',
@@ -192,7 +186,7 @@ const refreshAccessToken = async (refreshToken) => {
 const forgotPassword = async (email) => {
   const user = await db
     .selectFrom('users')
-    .select(['id', 'email', 'first_name'])
+    .select(['id', 'email', 'name'])
     .where('email', '=', email)
     .executeTakeFirst();
 
@@ -226,13 +220,13 @@ const forgotPassword = async (email) => {
     subject: 'Password Reset Request',
     html: `
       <h1>Password Reset</h1>
-      <p>Hi ${user.first_name},</p>
+      <p>Hi ${user.name},</p>
       <p>You requested to reset your password. Click the link below to reset it:</p>
       <a href="${resetLink}">Reset Password</a>
       <p>This link expires in 1 hour.</p>
       <p>If you didn't request this, please ignore this email.</p>
     `,
-    text: `Hi ${user.first_name}, Reset your password here: ${resetLink}`,
+    text: `Hi ${user.name}, Reset your password here: ${resetLink}`,
   });
 
   logger.info('Password reset email sent', { userId: user.id, email });
@@ -244,7 +238,7 @@ const forgotPassword = async (email) => {
 const resendPasswordReset = async (email) => {
   const user = await db
     .selectFrom('users')
-    .select(['id', 'email', 'first_name'])
+    .select(['id', 'email', 'name'])
     .where('email', '=', email)
     .executeTakeFirst();
 
@@ -298,13 +292,13 @@ const resendPasswordReset = async (email) => {
     subject: 'Password Reset Request',
     html: `
       <h1>Password Reset</h1>
-      <p>Hi ${user.first_name},</p>
+      <p>Hi ${user.name},</p>
       <p>You requested to reset your password. Click the link below to reset it:</p>
       <a href="${resetLink}">Reset Password</a>
       <p>This link expires in 1 hour.</p>
       <p>If you didn't request this, please ignore this email.</p>
     `,
-    text: `Hi ${user.first_name}, Reset your password here: ${resetLink}`,
+    text: `Hi ${user.name}, Reset your password here: ${resetLink}`,
   });
 
   logger.info('Password reset email resent', { userId: user.id, email });
@@ -457,7 +451,7 @@ const verifyEmail = async (token) => {
 const resendVerificationEmail = async (email) => {
   const user = await db
     .selectFrom('users')
-    .select(['id', 'email', 'first_name', 'is_email_verified'])
+    .select(['id', 'email', 'name', 'is_email_verified'])
     .where('email', '=', email)
     .executeTakeFirst();
 
@@ -517,7 +511,7 @@ const resendVerificationEmail = async (email) => {
     subject: 'Verify Your Email Address',
     html: `
       <h1>Verify Your Email</h1>
-      <p>Hi ${user.first_name},</p>
+      <p>Hi ${user.name},</p>
       <p>Please verify your email address to complete your registration:</p>
       <a href="${verificationLink}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">
         Verify Email
@@ -525,7 +519,7 @@ const resendVerificationEmail = async (email) => {
       <p>Or copy this link: ${verificationLink}</p>
       <p>This link expires in 24 hours.</p>
     `,
-    text: `Hi ${user.first_name}, Verify your email here: ${verificationLink}`,
+    text: `Hi ${user.name}, Verify your email here: ${verificationLink}`,
   });
 
   logger.info('Verification email resent', { userId: user.id, email });
@@ -541,9 +535,7 @@ const getCurrentUser = async (userId) => {
     .select([
       'users.id',
       'users.email',
-      'users.first_name',
-      'users.last_name',
-      'users.phone',
+      'users.name',
       'users.is_active',
       'users.is_email_verified',
       'users.created_at',

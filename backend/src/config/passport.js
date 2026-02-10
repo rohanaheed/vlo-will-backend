@@ -70,9 +70,7 @@ const jwtStrategy = new JwtStrategy(jwtOptions, async (payload, done) => {
       .select([
         'users.id',
         'users.email',
-        'users.first_name',
-        'users.last_name',
-        'users.phone',
+        'users.name',
         'users.is_active',
         'users.is_email_verified',
         'users.role_id',
@@ -150,8 +148,7 @@ const googleStrategy = new GoogleStrategy(
             id: userId,
             email: email.toLowerCase(),
             password_hash: fakePassword,
-            first_name: firstName,
-            last_name: lastName,
+            name: `${firstName} ${lastName}`.trim(),
             google_id: googleId,
             is_active: true,
             is_email_verified: true, // Google emails are pre-verified
@@ -194,8 +191,7 @@ const initializePassport = () => {
         .select([
           'users.id',
           'users.email',
-          'users.first_name',
-          'users.last_name',
+          'users.name',
           'users.is_active',
           'users.role_id',
           'roles.name as role_name',

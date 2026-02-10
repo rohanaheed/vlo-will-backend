@@ -228,7 +228,7 @@ const googleCallback = async (req, res, next) => {
   passport.authenticate('google', { session: false }, async (err, user, info) => {
     try {
           if (err) {
-        console.error('🔥 GOOGLE AUTH ERR:', err);
+        console.error('GOOGLE AUTH ERR:', err);
         return res.status(500).json({
           error: 'google_auth_failed',
           details: err.message || err,
