@@ -1,6 +1,7 @@
 const { z } = require('zod');
 
-const { MARITAL_STATUSES, RELATIONSHIPS } = require('../../utils/constants')
+const { MARITAL_STATUSES, RELATIONSHIPS } = require('../../utils/constants');
+const { is } = require('zod/locales');
 const uuidSchema = z.string().uuid('Invalid ID format');
   
 // Step 1: Testator
@@ -277,7 +278,17 @@ const step6Schema = z.object({
 // STEP 7: GIFTS
 const giftsSchema = z.object({
   id: uuidSchema.optional().nullable(),
-  description: z.string().max(1000).optional().nullable(),
+  beneficiary_name: z.string().max(255).optional().nullable(),
+  asset_type_beneficiary: z.string().max(255).optional().nullable(),
+  gift_type_beneficiary: z.string().max(255).optional().nullable(),
+  gift_description_beneficiary: z.string().max(1000).optional().nullable(),
+  additional_information_beneficiary: z.string().max(1000).optional().nullable(),
+  is_charity: z.boolean().optional().default(false),
+  organization_name: z.string().max(255).optional().nullable(),
+  asset_type_charity: z.string().max(255).optional().nullable(),
+  gift_type_charity: z.string().max(255).optional().nullable(),
+  gift_description_charity: z.string().max(1000).optional().nullable(),
+  additional_information_charity: z.string().max(1000).optional().nullable()
 }).passthrough();
 
 const step7Schema = z.object({
@@ -287,11 +298,14 @@ const step7Schema = z.object({
 // STEP 8: RESIDUAL
 const residualSchema = z.object({
   id: uuidSchema.optional().nullable(),
+  full_name: z.string().max(255).optional().nullable(),
+  relationship_to_testator: z.string().max(255).optional().nullable(),
   description: z.string().max(1000).optional().nullable(),
+  additional_information: z.string().max(1000).optional().nullable(),
 }).passthrough();
 
 const step8Schema = z.object({
-  residual: z.array(residualSchema).optional().default([]),
+  residual_estates: z.array(residualSchema).optional().default([]),
 }).passthrough();
 
 // STEP 9: FUNERAL

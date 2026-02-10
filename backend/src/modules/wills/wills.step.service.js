@@ -1166,10 +1166,74 @@ if (!data) return;
 };
 
 // Step 7 Gifts (General) and Step 8 Gifts - (Islamic)
-const saveGifts = async () => {};
+const saveGifts = async (trx, willId, data) => {
+  if (!data) return;
+
+  const { gifts = [] } = data;
+
+  await trx
+    .deleteFrom('gifts')
+    .where('will_id', '=', willId)
+    .execute();
+
+  if (!gifts.length) return;
+
+  await trx
+    .insertInto('gifts')
+    .values(
+      gifts.map((g) => {
+        const isCharity = g.is_charity === true;
+
+        return {
+          id: g.id || generateUUID(),
+          will_id: willId,
+          beneficiary_name:  g.beneficiary_name,
+          asset_type_beneficiary: g.asset_type_beneficiary,
+          gift_type_beneficiary:  g.gift_type_beneficiary,
+          gift_description_beneficiary:g.gift_description_beneficiary,
+          additional_information_beneficiary: g.additional_information_beneficiary,
+          is_charity: isCharity,
+          organization_name: isCharity ? g.organization_name : null,
+          asset_type_charity: isCharity ? g.asset_type_charity : null,
+          gift_type_charity: isCharity ? g.gift_type_charity : null,
+          gift_description_charity: isCharity ? g.gift_description_charity : null,
+          additional_information_charity: isCharity ? g.additional_information_charity : null,
+        };
+      })
+    )
+    .execute();
+};
 
 // Step 8 Residual (General)
-const saveResidual = async () => {};
+const saveResidual = async (trx, willId, data) => {
+  if(!data) return;
+
+  const { residual_estates } = data;
+
+  await trx
+    .deleteFrom('residual_estates')
+    .where('will_id', '=', willId)
+    .execute();
+  
+  if (!residual_estates.length) return;
+
+  await trx
+  .insertInto('residual_estates')
+  .values(
+    residual_estates.map((r, index) => ({
+      id: r.id || generateUUID(),
+      will_id: willId,
+      full_name: r.full_name,
+      description: r.description,
+      relationship_to_testator: r.relationship_to_testator,
+      additional_information: r.additional_information,
+      order_index: index + 1,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }))
+  )
+  .execute();
+};
 
 // Step 9 Funeral
 const saveFuneral = async () => {};
