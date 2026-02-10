@@ -138,24 +138,13 @@ router.post(
 );
 
 /**
- * @route   GET /api/v1/auth/google
+ * @route   POST /api/v1/auth/google
  * @desc    Initiate Google OAuth login
  * @access  Public
  */
-router.get(
-  '/google',
+router.post(
+  '/google', 
   authLimiter,
-  authController.googleLogin
-);
-
-/**
- * @route   GET /api/v1/auth/google/callback
- * @desc    Google OAuth callback
- * @access  Public
- */
-router.get(
-  '/google/callback',
-  authController.googleCallback
-);
+  authController.googleLogin);
 
 module.exports = router;

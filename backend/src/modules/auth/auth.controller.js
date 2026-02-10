@@ -221,59 +221,37 @@ const changePassword = async (req, res, next) => {
 };
 
 /**
- * Google OAuth login callback
- * GET /api/v1/auth/google/callback
- */
-const googleCallback = async (req, res, next) => {
-  passport.authenticate('google', { session: false }, async (err, user, info) => {
-    try {
-          if (err) {
-        console.error('GOOGLE AUTH ERR:', err);
-        return res.status(500).json({
-          error: 'google_auth_failed',
-          details: err.message || err,
-        });
-      }
-
-      if (!user) {
-        const message = info?.message || 'Google authentication failed';
-        logger.warn('Google auth failed:', message);
-        return res.redirect(`${config.frontendUrl}/auth/login?error=${encodeURIComponent(message)}`);
-      }
-
-      // Generate tokens
-      const tokens = authService.generateTokens(user.id);
-
-      await createAuditLog({
-        userId: user.id,
-        action: AUDIT_ACTIONS.LOGIN,
-        entityType: 'user',
-        entityId: user.id,
-        newValues: { provider: 'google' },
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-      });
-
-      // Redirect to frontend with tokens in query params
-      const redirectUrl = new URL(`${config.frontendUrl}/auth/callback`);
-      redirectUrl.searchParams.append('access_token', tokens.accessToken);
-      redirectUrl.searchParams.append('refresh_token', tokens.refreshToken);
-      redirectUrl.searchParams.append('user_id', user.id);
-
-      res.redirect(redirectUrl.toString());
-    } catch (error) {
-      logger.error('Error in Google callback:', error);
-      res.redirect(`${config.frontendUrl}/auth/login?error=token_generation_failed`);
-    }
-  })(req, res, next);
-};
-
-/**
  * Google OAuth login initiation
- * GET /api/v1/auth/google
+ * POST /api/v1/auth/google
  */
-const googleLogin = (req, res, next) => {
-  passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+const googleLogin = async (req, res, next) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({
+        success: false,
+        message: 'Google credential token is required',
+      });
+    }
+
+    const result = await authService.googleLogin(credential);
+
+    await createAuditLog({
+      userId: result.user.id,
+      action: AUDIT_ACTIONS.LOGIN,
+      entityType: 'user',
+      entityId: result.user.id,
+      newValues: { provider: 'google' },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+    });
+
+    return sendSuccess(res, result, 'Login successful');
+  } catch (error) {
+    logger.error('Google login controller error:', error);
+    next(error);
+  }
 };
 
 module.exports = {
@@ -288,6 +266,5 @@ module.exports = {
   resendVerificationEmail,
   me,
   changePassword,
-  googleLogin,
-  googleCallback,
+  googleLogin
 };

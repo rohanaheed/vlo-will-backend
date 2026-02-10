@@ -7,6 +7,9 @@ const { generateUUID, generateToken, hashToken } = require('../../utils/helpers'
 const { ConflictError, UnauthorizedError, NotFoundError, BadRequestError } = require('../../utils/errors');
 const { ROLE_IDS } = require('../../db/seeds/001_roles');
 const logger = require('../../utils/logger');
+const { OAuth2Client } = require('google-auth-library');
+
+const googleClient = new OAuth2Client(config.google.clientId);
 
 const SALT_ROUNDS = 12;
 
@@ -552,6 +555,113 @@ const getCurrentUser = async (userId) => {
   return user;
 };
 
+const googleLogin = async (credential) => {
+  try {
+    // Verify the Google token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: config.google.clientId,
+    });
+
+    const payload = ticket.getPayload();
+    const email = payload.email;
+    const googleId = payload.sub;
+    const name = payload.name;
+    const emailVerified = payload.email_verified;
+
+    if (!email) {
+      throw new UnauthorizedError('No email provided by Google');
+    }
+
+    logger.info('Google credential verified', { email, googleId });
+
+    // Check if user exists
+    let user = await db
+      .selectFrom('users')
+      .selectAll()
+      .where('email', '=', email.toLowerCase())
+      .executeTakeFirst();
+
+    if (user) {
+      // User exists Update Google ID if not set
+      if (!user.google_id) {
+        user = await db
+          .updateTable('users')
+          .set({ 
+            google_id: googleId,
+            updated_at: new Date(),
+          })
+          .where('id', '=', user.id)
+          .returningAll()
+          .executeTakeFirst();
+        
+        logger.info('Updated existing user with Google ID', { userId: user.id, email });
+      }
+
+      // Check if user is active
+      if (!user.is_active) {
+        throw new UnauthorizedError('Account is deactivated');
+      }
+    } else {
+      // Create new user
+      const userId = generateUUID();
+      const fakePassword = await bcrypt.hash(crypto.randomUUID().toString(), 12);
+      
+      user = await db
+        .insertInto('users')
+        .values({
+          id: userId,
+          email: email.toLowerCase(),
+          password_hash: fakePassword,
+          name,
+          google_id: googleId,
+          is_active: true,
+          is_email_verified: emailVerified,
+          email_verified_at: emailVerified ? new Date() : null,
+          role_id: ROLE_IDS.USER,
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .returningAll()
+        .executeTakeFirst();
+
+      logger.info('New user created via Google login', { userId: user.id, email });
+    }
+
+    // Generate tokens
+    const tokens = generateTokens(user.id);
+
+    // Get user with role info
+    const userWithRole = await db
+      .selectFrom('users')
+      .leftJoin('roles', 'users.role_id', 'roles.id')
+      .select([
+        'users.id',
+        'users.email',
+        'users.name',
+        'users.is_active',
+        'users.is_email_verified',
+        'users.created_at',
+        'roles.name as role_name',
+      ])
+      .where('users.id', '=', user.id)
+      .executeTakeFirst();
+
+    logger.info('User logged in via Google', { userId: user.id, email });
+
+    return {
+      user: userWithRole,
+      tokens,
+    };
+  } catch (error) {
+    logger.error('Google login error:', error);
+    if (error.message && error.message.includes('Token used too late')) {
+      throw new UnauthorizedError('Google token expired');
+    }
+    throw error;
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -564,4 +674,5 @@ module.exports = {
   verifyEmail,
   resendVerificationEmail,
   getCurrentUser,
+  googleLogin
 };
