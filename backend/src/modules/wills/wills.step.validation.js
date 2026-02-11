@@ -25,8 +25,8 @@ const step1Schema = z.object({
   phone: z.string().max(30).optional().nullable(),
   email: z.string().email().max(255).optional().nullable(),
   marital_status: z.enum(Object.values((MARITAL_STATUSES))).optional().nullable(),
-  include_future_marriage_clause: z.boolean().optional().nullable(),
-  declaration_confirmed: z.boolean().optional().nullable(),
+  include_future_marriage_clause: z.boolean().default(false).optional().nullable(),
+  declaration_confirmed: z.boolean().default(true).optional().nullable(),
   jurisdiction_country: z.string().max(50).optional().nullable(),
   jurisdiction_region: z.string().max(50).optional().nullable(),
 }).passthrough();
@@ -112,7 +112,7 @@ const guardianSchema = z.object({
   phone_country_code: z.string().max(10).optional().nullable(),
   phone: z.string().max(30).optional().nullable(),
   email: z.string().email().optional().nullable(),
-  is_alternate: z.boolean().default(false),
+  is_alternate: z.boolean().optional().nullable().default(false),
 }).passthrough();
 
 const trusteeSchema = z.object({
@@ -133,18 +133,18 @@ const trusteeSchema = z.object({
   phone_country_code: z.string().max(10).optional().nullable(),
   phone: z.string().max(30).optional().nullable(),
   email: z.string().email().max(255).optional().nullable(),
-  include_all_general_powers: z.boolean().optional(),
-  power_of_management: z.boolean().optional(),
-  power_of_investment: z.boolean().optional(),
-  power_to_delegate: z.boolean().optional(),
-  power_in_relation_to_property: z.boolean().optional(),
-  power_to_lend_and_borrow: z.boolean().optional(),
-  power_to_apply_income_for_minors: z.boolean().optional(),
-  power_to_make_advancements: z.boolean().optional(),
-  power_to_appropriate_assets: z.boolean().optional(),
-  power_to_act_by_majority: z.boolean().optional(),
-  power_to_charge: z.boolean().optional(),
-  power_to_invest_in_non_interest_accounts: z.boolean().optional(),
+  include_all_general_powers: z.boolean().optional().default(false),
+  power_of_management: z.boolean().optional().default(false),
+  power_of_investment: z.boolean().optional().default(false),
+  power_to_delegate: z.boolean().optional().default(false),
+  power_in_relation_to_property: z.boolean().optional().default(false),
+  power_to_lend_and_borrow: z.boolean().optional().default(false),
+  power_to_apply_income_for_minors: z.boolean().optional().default(false),
+  power_to_make_advancements: z.boolean().optional().default(false),
+  power_to_appropriate_assets: z.boolean().optional().default(false),
+  power_to_act_by_majority: z.boolean().optional().default(false),
+  power_to_charge: z.boolean().optional().default(false),
+  power_to_invest_in_non_interest_accounts: z.boolean().optional().default(false),
   additional_powers: z.string().max(2000).optional().nullable(),
 }).passthrough();
 
@@ -160,7 +160,7 @@ const beneficiarySchema = z.object({
   phone_country_code: z.string().max(10).optional().nullable(),
   phone: z.string().max(30).optional().nullable(),
   email: z.string().email().max(255).optional().nullable(),
-  is_alternate: z.boolean().default(false)
+  is_alternate: z.boolean().optional().nullable().default(false)
 }).passthrough();
 
 const charitySchema = z.object({
@@ -171,7 +171,7 @@ const charitySchema = z.object({
   gift_amount: z.number().min(0).optional().nullable(),
   gift_percentage: z.number().min(0).max(100).optional().nullable(),
   gift_description: z.string().max(1000).optional().nullable(),
-  is_alternate: z.boolean().default(false),
+  is_alternate: z.boolean().optional().nullable().default(false),
 }).passthrough();
 
 const step4Schema = z.object({
@@ -311,11 +311,40 @@ const step8Schema = z.object({
 // STEP 9: FUNERAL
 const funeralSchema = z.object({
   id: uuidSchema.optional().nullable(),
-  instructions: z.string().max(2000).optional().nullable(),
+  body_disposition: z.enum(['burial','cremation','no_preference']).optional().nullable(),
+  burial_location: z.boolean().optional().default(false),
+  location: z.string().max(255).optional().nullable(),
+  specific_request: z.string().max(1000).optional().nullable(),
+  funeral_expense: z.boolean().optional().default(false),
+  payment_priority: z.string().max(255).optional().nullable(),
+  provider_name: z.string().max(255).optional().nullable(),
+  policy_number: z.string().max(255).optional().nullable(),
+  title: z.enum(['Mr','Mrs','Ms','Dr','Miss','Mx']).optional().nullable(),
+  holder_name: z.string().max(255).optional().nullable(),
+  coverage_amount: z.number().optional().nullable(),
+  phone_country_code: z.string().max(10).optional().nullable(),
+  phone: z.string().max(30).optional().nullable(),
+  email: z.string().email().optional().nullable(),
+  website_url: z.string().url().optional().nullable(),
+  document_location: z.string().max(255).optional().nullable(),
+  donate_organ: z.boolean().optional().default(false),
+  organ_donation_type: z.enum(['all','specific']).optional().nullable(),
+  heart: z.boolean().optional().default(false),
+  lungs: z.boolean().optional().default(false),
+  kidneys: z.boolean().optional().default(false),
+  liver: z.boolean().optional().default(false),
+  corneas: z.boolean().optional().default(false),
+  pancreas: z.boolean().optional().default(false),
+  tissue: z.boolean().optional().default(false),
+  small_bowel: z.boolean().optional().default(false),
+  is_registered_donor: z.boolean().optional().default(false),
+  reference_number: z.string().max(255).optional().nullable(),
+  additional_notes: z.string().max(1000).optional().nullable(),
 }).passthrough();
 
+
 const step9Schema = z.object({
-  funeral: z.array(funeralSchema).optional().default([]),
+  funeral: funeralSchema.optional(),
 }).passthrough();
 
 // STEP 10: WITNESSES
@@ -323,11 +352,11 @@ const witnessSchema = z.object({
   id: uuidSchema.optional().nullable(),
   title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
   full_name: z.string().min(1).max(255),
-  date_of_birth: z.string().optional().nullable(),
-  relationship_to_testator: z.enum(Object.values((RELATIONSHIPS))).optional().nullable()
+  date: z.string().optional().nullable(),
 }).passthrough();
 
 const step10Schema = z.object({
+  have_witnesses: z.boolean().optional().default(false),
   witnesses: z.array(witnessSchema).optional().default([]),
 }).passthrough();
 

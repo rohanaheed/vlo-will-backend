@@ -264,7 +264,6 @@ const saveStepData = async (
       .returning([
         "id",
         "will_type",
-        "marital_status",
         "status",
         "current_step",
         "highest_completed_step",
@@ -447,39 +446,12 @@ const saveStepSpecificData = async (
   }
 };
 
-/**
- * Upsert testator (Step 1)
- * Also updates jurisdiction and marital_status on wills table if provided
- */
+// Upsert Testator
 const upsertTestator = async (trx, willId, data) => {
-  if (!data || Object.keys(data).length === 0) return;
+  if (!data) return;
 
-  const { marital_status, ...testatorData } = data;
+  const { ...testatorData } = data;
 
-  /**
-   * 1️⃣ Update WILL table (authoritative fields)
-   */
-  const willUpdate = {};
-
-  if (marital_status !== undefined) {
-    willUpdate.marital_status = marital_status;
-    testatorData.marital_status = marital_status;
-  }
-
-  if (Object.keys(willUpdate).length > 0) {
-    await trx
-      .updateTable("wills")
-      .set({
-        ...willUpdate,
-        updated_at: new Date(),
-      })
-      .where("id", "=", willId)
-      .execute();
-  }
-
-  /**
-   * 2️⃣ Upsert TESTATOR table (profile reference)
-   */
   if (Object.keys(testatorData).length === 0) return;
 
   const existing = await trx
@@ -1236,7 +1208,62 @@ const saveResidual = async (trx, willId, data) => {
 };
 
 // Step 9 Funeral
-const saveFuneral = async () => {};
+const saveFuneral = async (trx, willId, data) => {
+  if(!data) return;
+
+  await trx
+    .deleteFrom('funeral_wishes')
+    .where('will_id', '=', willId)
+    .execute();
+
+  const funeral = data.funeral || data;
+  if (!funeral || Object.keys(funeral).length === 0) return;
+
+  const burialLocation = funeral.burial_location === true;
+  const funeralExpense = funeral.funeral_expense === true;
+  const donateOrgan = funeral.donate_organ === true;
+  const donationType = funeral.organ_donation_type === 'all';
+  const registeredDonor = funeral.is_registered_donor === true;
+
+  await trx
+    .insertInto('funeral_wishes')
+    .values({
+      id: funeral.id || generateUUID(),
+      will_id: willId,
+      body_disposition: funeral.body_disposition,
+      burial_location: funeral.burial_location,
+      location: burialLocation ? funeral.location : null,
+      specific_request: burialLocation ? funeral.specific_request : null,
+      funeral_expense: funeral.funeral_expense,
+      payment_priority: funeralExpense ? funeral.payment_priority : null,
+      provider_name: funeralExpense ? funeral.provider_name : null,
+      policy_number: funeralExpense ? funeral.policy_number : null,
+      title: funeralExpense ? funeral.title : null,
+      holder_name: funeralExpense ? funeral.holder_name : null,
+      coverage_amount: funeralExpense ? funeral.coverage_amount : null,
+      phone_country_code: funeralExpense ? funeral.phone_country_code : null,
+      phone: funeralExpense ? funeral.phone : null,
+      email: funeralExpense ? funeral.email : null,
+      website_url: funeralExpense ? funeral.website_url : null,
+      document_location: funeralExpense ? funeral.document_location : null,
+      donate_organ: funeral.donate_organ,
+      organ_donation_type: donateOrgan ? funeral.organ_donation_type : null,
+      heart: donationType ? null : funeral.heart,
+      lungs: donationType ? null : funeral.lungs,
+      kidneys: donationType ? null : funeral.kidneys,
+      liver: donationType ? null : funeral.liver,
+      corneas: donationType ? null : funeral.corneas,
+      pancreas: donationType ? null : funeral.pancreas,
+      tissue: donationType ? null : funeral.tissue,
+      small_bowel: donationType ? null : funeral.small_bowel,
+      is_registered_donor: funeral.is_registered_donor,
+      reference_number: registeredDonor ? funeral.reference_number : null,
+      additional_notes: funeral.additional_notes,
+      created_at: new Date(),
+      updated_at: new Date(),
+    })
+    .execute();
+};
 
 // Step 10 Distribution (Islamic)
 const saveIslamicDistribution = async () => {};
@@ -1272,7 +1299,6 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
 
       data = {
         ...testator,
-        marital_status: testator?.marital_status ?? will.marital_status,
         jurisdiction_country: testator?.jurisdiction_country,
         jurisdiction_region: testator?.jurisdiction_region,
       };

@@ -18,7 +18,6 @@ const getWills = async (query, userId, userRole) => {
       'id',
       'user_id',
       'will_type',
-      'marital_status',
       'status',
       'current_step',
       'is_for_self',
@@ -105,11 +104,8 @@ const createWill = async (userId, willData) => {
       id: willId,
       user_id: userId,
       will_type: willData.will_type,
-      marital_status: willData.marital_status,
       status: WILL_STATUSES.DRAFT,
       current_step: 1,
-      is_for_self: willData.is_for_self ?? true,
-      not_for_self_explanation: willData.not_for_self_explanation,
       created_at: new Date(),
       updated_at: new Date(),
     })
@@ -117,10 +113,8 @@ const createWill = async (userId, willData) => {
       'id',
       'user_id',
       'will_type',
-      'marital_status',
       'status',
       'current_step',
-      'is_for_self',
       'created_at',
     ])
     .executeTakeFirst();
@@ -159,12 +153,8 @@ const updateWill = async (willId, updateData, userId, userRole) => {
     .returning([
       'id',
       'will_type',
-      'marital_status',
       'status',
       'current_step',
-      'is_for_self',
-      'signing_date',
-      'signing_place',
       'updated_at',
     ])
     .executeTakeFirst();

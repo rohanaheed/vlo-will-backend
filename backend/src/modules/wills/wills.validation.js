@@ -22,17 +22,7 @@ const getWillByIdSchema = {
 
 const createWillSchema = {
   body: z.object({
-    will_type: z.enum(Object.values(WILL_TYPES)),
-    // marital_status is collected in Step 1 (Testator form), not on will creation
-    marital_status: z.enum(Object.values(MARITAL_STATUSES)).optional(),
-    is_for_self: z.boolean().default(true),
-    not_for_self_explanation: z.string().max(1000).optional().nullable(),
-    jurisdiction: z.enum([
-        'england',
-        'wales', 
-        'scotland',
-        'northern_ireland'
-      ]).optional().nullable()
+    will_type: z.enum(Object.values(WILL_TYPES)).optional()
   })
 };
 
@@ -41,19 +31,8 @@ const updateWillSchema = {
     id: uuidSchema,
   }),
   body: z.object({
-    marital_status: z.enum(Object.values(MARITAL_STATUSES)).optional(),
-    is_for_self: z.boolean().optional(),
-    not_for_self_explanation: z.string().max(1000).optional().nullable(),
-    signing_date: z.string().date().optional().nullable(),
-    signing_place: z.string().max(255).optional().nullable(),
-    execution_date: z.string().date().optional().nullable(),
-    execution_place: z.string().max(255).optional().nullable(),
-    revocation_clause_date: z.string().date().optional().nullable(),
-    additional_clauses: z.array(z.object({
-      title: z.string().optional(),
-      content: z.string(),
-    })).optional().nullable(),
-  }),
+     will_type: z.enum(Object.values(WILL_TYPES)).optional()
+  })
 };
 
 const updateStepSchema = {

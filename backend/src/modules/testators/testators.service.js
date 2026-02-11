@@ -21,29 +21,10 @@ const upsertTestator = async (willId, data, userId, userRole) => {
   if (!data || Object.keys(data).length === 0) return null;
 
   const {
-    marital_status,
     ...testatorData
   } = data;
 
   return db.transaction().execute(async (trx) => {
-   // Update Will  
-    const willUpdate = {};
-
-    if (marital_status !== undefined) {
-      willUpdate.marital_status = marital_status;
-      testatorData.marital_status = marital_status;
-    }
-
-    if (Object.keys(willUpdate).length > 0) {
-      await trx
-        .updateTable('wills')
-        .set({
-          ...willUpdate,
-          updated_at: new Date(),
-        })
-        .where('id', '=', willId)
-        .execute();
-    }
 
     // Create or update testator
     const existing = await trx
