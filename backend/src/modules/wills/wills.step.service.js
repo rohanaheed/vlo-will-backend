@@ -703,6 +703,8 @@ const saveBeneficiaries = async (trx, beneficiaryId, beneficiaries = []) => {
         title: b.title,
         full_name: b.full_name,
         relationship_to_testator: b.relationship_to_testator,
+        building_number: b.building_number,
+        building_name: b.building_name,
         city: b.city,
         county: b.county,
         postcode: b.postcode,
