@@ -101,17 +101,19 @@ const register = async ({ email, password, name }) => {
 /**
  * Generate JWT tokens
  */
-const generateTokens = (userId) => {
+const generateTokens = (userId, remember_me = false) => {
   const accessToken = jwt.sign(
     { sub: userId, type: 'access' },
     config.jwt.secret,
     { expiresIn: config.jwt.expiresIn }
   );
 
-  const refreshToken = jwt.sign(
+   const refreshToken = jwt.sign(
     { sub: userId, type: 'refresh' },
     config.jwt.refreshSecret,
-    { expiresIn: config.jwt.refreshExpiresIn }
+    { 
+      expiresIn: remember_me ? config.jwt.refreshExpiresInRememberMe : config.jwt.refreshExpiresIn
+    }
   );
 
   return { accessToken, refreshToken };
@@ -120,8 +122,8 @@ const generateTokens = (userId) => {
 /**
  * Login user (after passport authentication)
  */
-const login = async (user) => {
-  const tokens = generateTokens(user.id);
+const login = async (user, remember_me = false) => {
+  const tokens = generateTokens(user.id, remember_me);
 
   // Get user with role info
   const userWithRole = await db
@@ -555,7 +557,7 @@ const getCurrentUser = async (userId) => {
   return user;
 };
 
-const googleLogin = async (credential) => {
+const googleLogin = async (credential, remember_me = false) => {
   try {
     // Verify the Google token
     const ticket = await googleClient.verifyIdToken({
@@ -629,7 +631,7 @@ const googleLogin = async (credential) => {
     }
 
     // Generate tokens
-    const tokens = generateTokens(user.id);
+    const tokens = generateTokens(user.id, remember_me);
 
     // Get user with role info
     const userWithRole = await db

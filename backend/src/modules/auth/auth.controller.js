@@ -36,8 +36,9 @@ const register = async (req, res, next) => {
  */
 const login = async (req, res, next) => {
   try {
+    const { remember_me = false } = req.body;
     // User is already authenticated by passport middleware
-    const result = await authService.login(req.user);
+    const result = await authService.login(req.user, remember_me);
 
     await createAuditLog({
       userId: req.user.id,
@@ -226,7 +227,7 @@ const changePassword = async (req, res, next) => {
  */
 const googleLogin = async (req, res, next) => {
   try {
-    const { credential } = req.body;
+    const { credential, remember_me = false } = req.body;
 
     if (!credential) {
       return res.status(400).json({
@@ -235,7 +236,7 @@ const googleLogin = async (req, res, next) => {
       });
     }
 
-    const result = await authService.googleLogin(credential);
+    const result = await authService.googleLogin(credential, remember_me);
 
     await createAuditLog({
       userId: result.user.id,
