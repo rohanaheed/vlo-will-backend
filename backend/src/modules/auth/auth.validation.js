@@ -18,6 +18,7 @@ const loginSchema = {
   body: z.object({
     email: z.string().email('Invalid email address').toLowerCase().trim(),
     password: z.string().min(1, 'Password is required'),
+    remember_me: z.boolean().optional().default(false)
   }),
 };
 
