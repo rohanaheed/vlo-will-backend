@@ -351,16 +351,29 @@ const step9Schema = z.object({
   funeral: funeralSchema.optional(),
 }).passthrough();
 
-// STEP 10: WITNESSES
+// STEP 10: WITNESScES
 const witnessSchema = z.object({
   id: uuidSchema.optional().nullable(),
   title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
   full_name: z.string().min(1).max(255),
-  date: z.string().optional().nullable(),
+  building_number: z.string().max(50).optional().nullable(),
+  building_name: z.string().max(100).optional().nullable(),
+  street: z.string().max(255).optional().nullable(),
+  town: z.string().max(100).optional().nullable(),
+  city: z.string().max(100).optional().nullable(),
+  county: z.string().max(100).optional().nullable(),
+  postcode: z.string().max(20).optional().nullable(),
+  country: z.string().max(100).optional().nullable(),
+  occupation: z.string().max(255).optional().nullable(),
+  witness_signature: z.string().max(255).optional().nullable()
 }).passthrough();
 
 const step10Schema = z.object({
-  have_witnesses: z.boolean().optional().default(false),
+  id: uuidSchema.optional().nullable(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  full_name: z.string().min(1).max(255),
+  date: z.string().optional().nullable(),
+  have_witness: z.boolean().optional().default(false),
   witnesses: z.array(witnessSchema).optional().default([]),
 }).passthrough();
 

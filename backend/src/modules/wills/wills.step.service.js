@@ -1271,7 +1271,94 @@ const saveFuneral = async (trx, willId, data) => {
 const saveIslamicDistribution = async () => {};
 
 // Step 10 Witnesses (General) and Step 11 Witnesses (Islamic)
-const saveWitnesses = async () => {};
+const saveWitnesses = async (trx, willId, data) => {
+  if (!data) return;
+
+  const { id, title, full_name, date, have_witness, witnesses = [] } = data;
+
+  // Check If Exists
+  const existing = await trx
+    .selectFrom('testator_witnesses')
+    .select(['id'])
+    .where('will_id', '=', willId)
+    .executeTakeFirst();
+
+  let testatorWitnessId;
+
+  if (existing) {
+    testatorWitnessId = existing.id;
+
+    await trx
+      .updateTable('testator_witnesses')
+      .set({
+        title,
+        full_name,
+        date,
+        have_witness: have_witness ?? false,
+        updated_at: new Date(),
+      })
+      .where('will_id', '=', willId)
+      .execute();
+  } else {
+    testatorWitnessId = id || generateUUID();
+
+    await trx
+      .insertInto('testator_witnesses')
+      .values({
+        id: testatorWitnessId,
+        will_id: willId,
+        title,
+        full_name,
+        date,
+        have_witness: have_witness ?? false,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .execute();
+  }
+
+  // Witnesses
+  if (!have_witness) {
+    await trx
+      .deleteFrom('witnesses')
+      .where('witness_id', '=', testatorWitnessId)
+      .execute();
+    return;
+  }
+
+  await trx
+    .deleteFrom('witnesses')
+    .where('witness_id', '=', testatorWitnessId)
+    .execute();
+
+  if (have_witness) {
+    await trx
+      .insertInto('witnesses')
+      .values(
+        witnesses.map((w) => ({
+          id: w.id || generateUUID(),
+          witness_id: testatorWitnessId,
+          title: w.title,
+          full_name: w.full_name,
+          building_number: w.building_number,
+          building_name: w.building_name,
+          street: w.street,
+          town: w.town,
+          city: w.city,
+          county: w.county,
+          postcode: w.postcode,
+          country: w.country,
+          occupation: w.occupation,
+          witness_signature: w.witness_signature,
+          order_index: w.order_index,
+          created_at: new Date(),
+          updated_at: new Date()
+        }))
+      )
+      .execute();
+  }
+};
+
 
 // Step 11 Signing (General) and Step 12 Signing (Islamic)
 const saveSigningDetails = async () => {};
