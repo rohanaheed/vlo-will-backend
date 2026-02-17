@@ -218,7 +218,7 @@ const forgotPassword = async (email) => {
     .execute();
 
   // Send reset email
-  const resetLink = `${config.frontendUrl}/reset-password?token=${token}`;
+  const resetLink = `${config.frontendUrl}/auth/new-password?token=${token}`;
 
   await sendEmail({
     to: user.email,
@@ -290,7 +290,7 @@ const resendPasswordReset = async (email) => {
     .execute();
 
   // Send reset email
-  const resetLink = `${config.frontendUrl}/reset-password?token=${token}`;
+  const resetLink = `${config.frontendUrl}/auth/new-password?token=${token}`;
 
   await sendEmail({
     to: user.email,
