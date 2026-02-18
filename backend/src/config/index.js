@@ -57,6 +57,7 @@ const config = {
   // Google OAuth
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
+    secret: process.env.RECAPTCHA_SECRET_KEY
   },
   
   // Rate Limiting
@@ -72,6 +73,9 @@ const config = {
     maxSize: process.env.LOG_MAX_SIZE || '20m',
     maxFiles: process.env.LOG_MAX_FILES || '14d',
   },
+
+  // Currency 
+  currency: process.env.CURRENCY_API_KEY
 };
 
 // Validate required config in production
