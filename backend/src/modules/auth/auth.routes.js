@@ -33,6 +33,16 @@ router.post(
 );
 
 /**
+ * @route   POST /api/v1/auth/verify-recaptcha
+ * @desc    Verify Bot
+ * @access  Public
+ */
+router.post(
+  '/verify-recaptcha',
+  authController.verifyRecaptcha
+)
+
+/**
  * @route   POST /api/v1/auth/logout
  * @desc    Logout user
  * @access  Private

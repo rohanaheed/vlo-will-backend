@@ -1,10 +1,8 @@
-const authService = require('./auth.service');
-const { sendSuccess, sendCreated } = require('../../utils/response');
-const { createAuditLog } = require('../../middleware/audit');
-const { AUDIT_ACTIONS } = require('../../utils/constants');
-const { passport } = require('../../config/passport');
-const logger = require('../../utils/logger');
-const { config } = require('../../config');
+const authService = require("./auth.service");
+const { sendSuccess, sendCreated } = require("../../utils/response");
+const { createAuditLog } = require("../../middleware/audit");
+const { AUDIT_ACTIONS } = require("../../utils/constants");
+const logger = require("../../utils/logger");
 
 /**
  * Register new user
@@ -17,14 +15,18 @@ const register = async (req, res, next) => {
     await createAuditLog({
       userId: user.id,
       action: AUDIT_ACTIONS.CREATE,
-      entityType: 'user',
+      entityType: "user",
       entityId: user.id,
       newValues: { email: user.email },
       ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
+      userAgent: req.get("User-Agent"),
     });
 
-    return sendCreated(res, { user }, 'Registration successful. Please verify your email.');
+    return sendCreated(
+      res,
+      { user },
+      "Registration successful. Please verify your email.",
+    );
   } catch (error) {
     next(error);
   }
@@ -43,13 +45,13 @@ const login = async (req, res, next) => {
     await createAuditLog({
       userId: req.user.id,
       action: AUDIT_ACTIONS.LOGIN,
-      entityType: 'user',
+      entityType: "user",
       entityId: req.user.id,
       ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
+      userAgent: req.get("User-Agent"),
     });
 
-    return sendSuccess(res, result, 'Login successful');
+    return sendSuccess(res, result, "Login successful");
   } catch (error) {
     next(error);
   }
@@ -64,15 +66,15 @@ const logout = async (req, res, next) => {
     await createAuditLog({
       userId: req.user.id,
       action: AUDIT_ACTIONS.LOGOUT,
-      entityType: 'user',
+      entityType: "user",
       entityId: req.user.id,
       ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
+      userAgent: req.get("User-Agent"),
     });
 
     // With JWT, we just return success
     // Client should discard the tokens
-    return sendSuccess(res, null, 'Logout successful');
+    return sendSuccess(res, null, "Logout successful");
   } catch (error) {
     next(error);
   }
@@ -87,7 +89,7 @@ const refreshToken = async (req, res, next) => {
     const { refresh_token } = req.body;
     const tokens = await authService.refreshAccessToken(refresh_token);
 
-    return sendSuccess(res, { tokens }, 'Token refreshed successfully');
+    return sendSuccess(res, { tokens }, "Token refreshed successfully");
   } catch (error) {
     next(error);
   }
@@ -106,7 +108,7 @@ const forgotPassword = async (req, res, next) => {
     return sendSuccess(
       res,
       null,
-      'If your email is registered, you will receive a password reset link.'
+      "If your email is registered, you will receive a password reset link.",
     );
   } catch (error) {
     next(error);
@@ -122,7 +124,11 @@ const resetPassword = async (req, res, next) => {
     const { token, new_password } = req.body;
     await authService.resetPassword(token, new_password);
 
-    return sendSuccess(res, null, 'Password reset successful. You can now login with your new password.');
+    return sendSuccess(
+      res,
+      null,
+      "Password reset successful. You can now login with your new password.",
+    );
   } catch (error) {
     next(error);
   }
@@ -141,7 +147,7 @@ const resendPasswordReset = async (req, res, next) => {
     return sendSuccess(
       res,
       null,
-      'If your email is registered, you will receive a password reset link.'
+      "If your email is registered, you will receive a password reset link.",
     );
   } catch (error) {
     next(error);
@@ -157,7 +163,7 @@ const verifyEmail = async (req, res, next) => {
     const { token } = req.body;
     const result = await authService.verifyEmail(token);
 
-    return sendSuccess(res, result, 'Email verified successfully');
+    return sendSuccess(res, result, "Email verified successfully");
   } catch (error) {
     next(error);
   }
@@ -176,7 +182,7 @@ const resendVerificationEmail = async (req, res, next) => {
     return sendSuccess(
       res,
       null,
-      'If the email is registered and not yet verified, you will receive a verification link.'
+      "If the email is registered and not yet verified, you will receive a verification link.",
     );
   } catch (error) {
     next(error);
@@ -191,7 +197,7 @@ const me = async (req, res, next) => {
   try {
     const user = await authService.getCurrentUser(req.user.id);
 
-    return sendSuccess(res, { user }, 'User profile retrieved');
+    return sendSuccess(res, { user }, "User profile retrieved");
   } catch (error) {
     next(error);
   }
@@ -209,13 +215,13 @@ const changePassword = async (req, res, next) => {
     await createAuditLog({
       userId: req.user.id,
       action: AUDIT_ACTIONS.PASSWORD_RESET,
-      entityType: 'user',
+      entityType: "user",
       entityId: req.user.id,
       ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
+      userAgent: req.get("User-Agent"),
     });
 
-    return sendSuccess(res, null, 'Password changed successfully');
+    return sendSuccess(res, null, "Password changed successfully");
   } catch (error) {
     next(error);
   }
@@ -227,30 +233,58 @@ const changePassword = async (req, res, next) => {
  */
 const googleLogin = async (req, res, next) => {
   try {
-    const { credential, remember_me = false } = req.body;
+    const { credential } = req.body;
 
     if (!credential) {
       return res.status(400).json({
         success: false,
-        message: 'Google credential token is required',
+        message: "Google credential token is required",
       });
     }
 
-    const result = await authService.googleLogin(credential, remember_me);
+    const result = await authService.googleLogin(credential);
 
     await createAuditLog({
       userId: result.user.id,
       action: AUDIT_ACTIONS.LOGIN,
-      entityType: 'user',
+      entityType: "user",
       entityId: result.user.id,
-      newValues: { provider: 'google' },
+      newValues: { provider: "google" },
       ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
+      userAgent: req.get("User-Agent"),
     });
 
-    return sendSuccess(res, result, 'Login successful');
+    return sendSuccess(res, result, "Login successful");
   } catch (error) {
-    logger.error('Google login controller error:', error);
+    logger.error("Google login controller error:", error);
+    next(error);
+  }
+};
+
+const verifyRecaptcha = async (req, res, next) => {
+  try {
+    const { recaptchaToken } = req.body;
+
+    if (!recaptchaToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Recaptcha token is required",
+      });
+    }
+
+    const result = await authService.verifyRecaptcha(recaptchaToken, req.ip);
+
+    if (!result.success) {
+      return res.status(403).json({
+        success: false,
+        message: "Recaptcha verification failed",
+        errors: result.errors || [],
+      });
+    }
+
+    return sendSuccess(res, { verified: true }, "Recaptcha Verified");
+  } catch (error) {
+    logger.error("Recaptcha Verification controller error:", error);
     next(error);
   }
 };
@@ -267,5 +301,6 @@ module.exports = {
   resendVerificationEmail,
   me,
   changePassword,
-  googleLogin
+  googleLogin,
+  verifyRecaptcha,
 };
