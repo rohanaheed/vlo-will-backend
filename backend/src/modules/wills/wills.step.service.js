@@ -1109,7 +1109,7 @@ const saveAssets = async (trx, willId, data) => {
 
 // Step 6 - Debts
 const saveDebts = async (trx, willId, data) => {
-if (!data) return;
+  if (!data) return;
 
   const { is_debtor = false, debts = [] } = data;
 
@@ -1145,15 +1145,12 @@ const saveGifts = async (trx, willId, data) => {
 
   const { gifts = [] } = data;
 
-  await trx
-    .deleteFrom('gifts')
-    .where('will_id', '=', willId)
-    .execute();
+  await trx.deleteFrom("gifts").where("will_id", "=", willId).execute();
 
   if (!gifts.length) return;
 
   await trx
-    .insertInto('gifts')
+    .insertInto("gifts")
     .values(
       gifts.map((g) => {
         const isCharity = g.is_charity === true;
@@ -1161,61 +1158,66 @@ const saveGifts = async (trx, willId, data) => {
         return {
           id: g.id || generateUUID(),
           will_id: willId,
-          beneficiary_name:  g.beneficiary_name,
+          beneficiary_name: g.beneficiary_name,
           asset_type_beneficiary: g.asset_type_beneficiary,
-          gift_type_beneficiary:  g.gift_type_beneficiary,
-          gift_description_beneficiary:g.gift_description_beneficiary,
-          additional_information_beneficiary: g.additional_information_beneficiary,
+          gift_type_beneficiary: g.gift_type_beneficiary,
+          gift_description_beneficiary: g.gift_description_beneficiary,
+          additional_information_beneficiary:
+            g.additional_information_beneficiary,
           is_charity: isCharity,
           organization_name: isCharity ? g.organization_name : null,
           asset_type_charity: isCharity ? g.asset_type_charity : null,
           gift_type_charity: isCharity ? g.gift_type_charity : null,
-          gift_description_charity: isCharity ? g.gift_description_charity : null,
-          additional_information_charity: isCharity ? g.additional_information_charity : null,
+          gift_description_charity: isCharity
+            ? g.gift_description_charity
+            : null,
+          additional_information_charity: isCharity
+            ? g.additional_information_charity
+            : null,
         };
-      })
+      }),
     )
     .execute();
 };
 
 // Step 8 Residual (General)
 const saveResidual = async (trx, willId, data) => {
-  if(!data) return;
+  if (!data) return;
 
   const { residual_estates } = data;
 
   await trx
-    .deleteFrom('residual_estates')
-    .where('will_id', '=', willId)
+    .deleteFrom("residual_estates")
+    .where("will_id", "=", willId)
     .execute();
-  
+
   if (!residual_estates.length) return;
 
   await trx
-  .insertInto('residual_estates')
-  .values(
-    residual_estates.map((r, index) => ({
-      id: r.id || generateUUID(),
-      will_id: willId,
-      full_name: r.full_name,
-      description: r.description,
-      relationship_to_testator: r.relationship_to_testator,
-      additional_information: r.additional_information,
-      order_index: index + 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }))
-  )
-  .execute();
+    .insertInto("residual_estates")
+    .values(
+      residual_estates.map((r, index) => ({
+        id: r.id || generateUUID(),
+        will_id: willId,
+        full_name: r.full_name,
+        description: r.description,
+        relationship_to_testator: r.relationship_to_testator,
+        additional_information: r.additional_information,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
 };
 
 // Step 9 Funeral
 const saveFuneral = async (trx, willId, data) => {
-  if(!data) return;
+  if (!data) return;
 
   await trx
-    .deleteFrom('funeral_wishes')
-    .where('will_id', '=', willId)
+    .deleteFrom("funeral_wishes")
+    .where("will_id", "=", willId)
     .execute();
 
   const funeral = data.funeral || data;
@@ -1224,11 +1226,11 @@ const saveFuneral = async (trx, willId, data) => {
   const burialLocation = funeral.burial_location === true;
   const funeralExpense = funeral.funeral_expense === true;
   const donateOrgan = funeral.donate_organ === true;
-  const donationType = funeral.organ_donation_type === 'all';
+  const donationType = funeral.organ_donation_type === "all";
   const registeredDonor = funeral.is_registered_donor === true;
 
   await trx
-    .insertInto('funeral_wishes')
+    .insertInto("funeral_wishes")
     .values({
       id: funeral.id || generateUUID(),
       will_id: willId,
@@ -1278,9 +1280,9 @@ const saveWitnesses = async (trx, willId, data) => {
 
   // Check If Exists
   const existing = await trx
-    .selectFrom('testator_witnesses')
-    .select(['id'])
-    .where('will_id', '=', willId)
+    .selectFrom("testator_witnesses")
+    .select(["id"])
+    .where("will_id", "=", willId)
     .executeTakeFirst();
 
   let testatorWitnessId;
@@ -1289,7 +1291,7 @@ const saveWitnesses = async (trx, willId, data) => {
     testatorWitnessId = existing.id;
 
     await trx
-      .updateTable('testator_witnesses')
+      .updateTable("testator_witnesses")
       .set({
         title,
         full_name,
@@ -1297,13 +1299,13 @@ const saveWitnesses = async (trx, willId, data) => {
         have_witness: have_witness ?? false,
         updated_at: new Date(),
       })
-      .where('will_id', '=', willId)
+      .where("will_id", "=", willId)
       .execute();
   } else {
     testatorWitnessId = id || generateUUID();
 
     await trx
-      .insertInto('testator_witnesses')
+      .insertInto("testator_witnesses")
       .values({
         id: testatorWitnessId,
         will_id: willId,
@@ -1320,20 +1322,20 @@ const saveWitnesses = async (trx, willId, data) => {
   // Witnesses
   if (!have_witness) {
     await trx
-      .deleteFrom('witnesses')
-      .where('witness_id', '=', testatorWitnessId)
+      .deleteFrom("witnesses")
+      .where("witness_id", "=", testatorWitnessId)
       .execute();
     return;
   }
 
   await trx
-    .deleteFrom('witnesses')
-    .where('witness_id', '=', testatorWitnessId)
+    .deleteFrom("witnesses")
+    .where("witness_id", "=", testatorWitnessId)
     .execute();
 
   if (have_witness) {
     await trx
-      .insertInto('witnesses')
+      .insertInto("witnesses")
       .values(
         witnesses.map((w) => ({
           id: w.id || generateUUID(),
@@ -1352,13 +1354,12 @@ const saveWitnesses = async (trx, willId, data) => {
           witness_signature: w.witness_signature,
           order_index: w.order_index,
           created_at: new Date(),
-          updated_at: new Date()
-        }))
+          updated_at: new Date(),
+        })),
       )
       .execute();
   }
 };
-
 
 // Step 11 Signing (General) and Step 12 Signing (Islamic)
 const saveSigningDetails = async () => {};
@@ -1724,24 +1725,64 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
           .where("will_id", "=", willId)
           .orderBy("order_index")
           .execute();
-        const is_debtor = debts.length > 0;  
+        const is_debtor = debts.length > 0;
         data = { is_debtor, debts };
       }
       break;
 
     // STEP 7 — DEBTS (Islamic) | GIFTS (General)
     case 7:
-      data = {};
+      if (isIslamic) {
+        const debts = await db
+          .selectFrom("debts")
+          .selectAll()
+          .where("will_id", "=", willId)
+          .orderBy("order_index")
+          .execute();
+        const is_debtor = debts.length > 0;
+        data = { is_debtor, debts };
+      } else {
+        const gifts = await db
+          .selectFrom("gifts")
+          .selectAll()
+          .where("will_id", "=", willId)
+          .orderBy("order_index")
+          .execute();
+        data = { gifts };
+      }
       break;
 
     // STEP 8 — GIFTS (Islamic) | RESIDUAL (General)
     case 8:
-      data = {};
+      if (isIslamic) {
+        const gifts = await db
+          .selectFrom("gifts")
+          .selectAll()
+          .where("will_id", "=", willId)
+          .orderBy("order_index")
+          .execute();
+        data = { gifts };
+      } else {
+        const residual_estates = await db
+          .selectFrom("residual_estates")
+          .selectAll()
+          .where("will_id", "=", willId)
+          .orderBy("order_index")
+          .execute();
+        data = { residual_estates };
+      }
       break;
 
     // STEP 9 — FUNERAL
     case 9:
-      data = {};
+      if (isIslamic) {
+        const funeral = db
+          .selectFrom("funeral")
+          .selectAll()
+          .where("will_id", "=", willId)
+          .execute();
+        data = { funeral };
+      }
       break;
 
     // STEP 10 — GENERAL: WITNESSES | ISLAMIC: DISTRIBUTION
@@ -1749,14 +1790,28 @@ const getStepData = async (willId, stepNumber, userId, userRole) => {
       if (isIslamic) {
         data = {};
       } else {
-        data = {
-          witnesses: await db
+        const testatorWitness = await db
+          .selectFrom("testator_witnesses")
+          .selectAll()
+          .where("will_id", "=", willId)
+          .executeTakeFirst();
+
+        if (!testatorWitness) {
+          return null;
+        }
+
+        let witnesses = [];
+
+        if (testatorWitness.have_witness) {
+          witnesses = await db
             .selectFrom("witnesses")
             .selectAll()
-            .where("will_id", "=", willId)
+            .where("witness_id", "=", testatorWitness.id)
             .orderBy("order_index")
-            .execute(),
-        };
+            .execute();
+        }
+
+        data = { ...testatorWitness, witnesses };
       }
       break;
 
