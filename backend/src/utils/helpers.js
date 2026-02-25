@@ -163,6 +163,12 @@ const isEmpty = (obj) => {
   return false;
 };
 
+const generateInvoiceId = () => {
+  const currentYear = new Date().getFullYear();
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  return `NV-${currentYear}-${randomNum}`;
+}
+
 module.exports = {
   generateUUID,
   generateToken,
@@ -177,4 +183,5 @@ module.exports = {
   retryWithBackoff,
   deepClone,
   isEmpty,
+  generateInvoiceId
 };

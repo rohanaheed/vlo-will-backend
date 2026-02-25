@@ -12,6 +12,12 @@ const spousesRoutes = require('../modules/spouses/spouses.routes');
 const beneficiariesRoutes = require('../modules/beneficiaries/beneficiaries.routes');
 const assetsRoutes = require('../modules/assets/assets.routes');
 const debtsRoutes = require('../modules/debts/debts.route');
+const feedbackRoutes = require('../modules/feedback/feedback.routes')
+const packagesRoutes = require('../modules/packages/packages.routes')
+const paymentMethodRoutes = require('../modules/paymentmethods/paymentmethods.routes')
+const paymentRoutes = require('../modules/payments/payment.routes')
+const stripeWebhookRoutes = require('../modules/stripe/stripewebhook.routes')
+const subscriptionRoutes = require('../modules/subscriptions/subscriptions.routes')
 
 const router = express.Router();
 
@@ -65,6 +71,23 @@ router.use(`${API_PREFIX}/wills/:willId/beneficiary`, beneficiariesRoutes);
 router.use(`${API_PREFIX}/wills/:willId/assets`, assetsRoutes);
 router.use(`${API_PREFIX}/wills/:willId/debts`, debtsRoutes);
 
+// Feedback Routes
+router.use(`${API_PREFIX}/feedback`, feedbackRoutes);
+
+// Packages Routes
+router.use(`${API_PREFIX}/packages`, packagesRoutes)
+
+// Payment Method Routes
+router.use(`${API_PREFIX}/payment-methods`, paymentMethodRoutes)
+
+// Payment Routes
+router.use(`${API_PREFIX}/payments`, paymentRoutes)
+
+// Stripe Webhook Routes
+router.use(`${API_PREFIX}/stripe/webhook`, stripeWebhookRoutes);
+
+// Subscription Routes
+router.use(`${API_PREFIX}/subscriptions`, subscriptionRoutes)
 // Admin routes
 // router.use(`${API_PREFIX}/admin`, adminRoutes);
 

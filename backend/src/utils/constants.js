@@ -187,6 +187,7 @@ const AUDIT_ACTIONS = {
   EMAIL_VERIFIED: 'email_verified',
   ROLE_ASSIGNED: 'role_assigned',
   PERMISSION_CHANGED: 'permission_changed',
+  VERIFY: 'verify'
 };
 
 // HTTP Status Codes

@@ -53,6 +53,11 @@ const config = {
   // Frontend
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
   frontendPublicUrl: process.env.FRONTEND_PUBLIC_URL || 'http://localhost:3001',
+
+  // Encryption
+  encryption: {
+    secret: process.env.ENCRYPTION_KEY,
+  },
   
   // Google OAuth
   google: {

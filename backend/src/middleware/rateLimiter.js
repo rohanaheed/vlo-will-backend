@@ -32,8 +32,13 @@ const defaultLimiter = rateLimit({
     next(new TooManyRequestsError());
   },
   skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/health' || req.path === '/api/health';
+    // Skip rate limiting for health checks and Stripe webhook callbacks
+    return (
+      req.path === '/health' ||
+      req.path === '/api/health' ||
+      req.path === '/api/v1/stripe/webhook' ||
+      req.path === '/api/v1/stripe/webhook/'
+    );
   },
 });
 
@@ -121,7 +126,7 @@ const pdfLimiter = rateLimit({
  * @param {Object} options - Rate limiter options
  * @returns {Function} Express middleware
  */
-const createLimiter = (options) => {
+const createLimiter = (options = {}) => {
   const {
     windowMs = 15 * 60 * 1000,
     max = 100,

@@ -26,7 +26,7 @@ app.use(helmet({
 app.use(cors({
   origin: config.nodeEnv === 'production' 
     ? config.frontendUrl 
-    : ['http://localhost:3000', 'http://localhost:3001', config.frontendUrl],
+    : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:5500', config.frontendUrl],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
@@ -37,6 +37,9 @@ app.use(requestIdMiddleware);
 
 // HTTP request logging
 app.use(httpLogger);
+
+// Stripe webhook must receive raw body for signature verification
+app.use('/api/v1/stripe/webhook', express.raw({ type: 'application/json' }));
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));

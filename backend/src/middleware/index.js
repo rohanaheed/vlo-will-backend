@@ -21,6 +21,7 @@ const {
 } = require('./rateLimiter');
 const { createAuditLog, auditMiddleware, captureOriginalData } = require('./audit');
 const requestIdMiddleware = require('./requestId');
+const { upload } = require('./multer');
 
 module.exports = {
   // Auth
@@ -63,4 +64,7 @@ module.exports = {
 
   // Request ID
   requestIdMiddleware,
+
+  // Multer
+  upload
 };
