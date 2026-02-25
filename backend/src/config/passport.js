@@ -1,13 +1,10 @@
 const passport = require('passport');
 const { Strategy: LocalStrategy } = require('passport-local');
 const { Strategy: JwtStrategy, ExtractJwt } = require('passport-jwt');
-const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
 const bcrypt = require('bcrypt');
 const { config } = require('./index');
 const { db } = require('./database');
-const { generateUUID } = require('../utils/helpers');
 const logger = require('../utils/logger');
-const { ROLE_IDS } = require('../db/seeds/001_roles');
 
 // Local Strategy - for email/password login
 const localStrategy = new LocalStrategy(
