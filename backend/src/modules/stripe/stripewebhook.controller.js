@@ -8,12 +8,16 @@ const {
   retrieveSubscription,
   cancelStripeSubscription,
 } = require("../../utils/stripe");
-const {
-  deletePaymentMethod,
-} = require("../paymentmethods/paymentmethods.service");
 const { NotFoundError, BadRequestError } = require("../../utils/errors");
 
-const { generateUUID, generateInvoiceId } = require("../../utils/helpers");
+const {
+  generateUUID,
+  generateInvoiceId,
+  generateTransactionId,
+} = require("../../utils/helpers");
+const { generateInvoicePDF } = require("../../config/pdf");
+const { sendEmail } = require("../../config/email");
+const { generateInvoiceEmail } = require("../../utils/emailTemplate");
 
 const stripe = getStripe();
 
@@ -101,7 +105,11 @@ const handleWebhook = async (req, res) => {
       }
       case "customer.subscription.updated": {
         const sub = event.data.object;
-        const newStatus = normalizeSubscriptionStatus(sub.status);
+        let newStatus = normalizeSubscriptionStatus(sub.status);
+
+        if (sub.pause_collection && sub.pause_collection.behavior === "void") {
+          newStatus = "paused";
+        }
 
         await db
           .updateTable("subscriptions")
@@ -151,7 +159,12 @@ const handleWebhook = async (req, res) => {
 
       case "payment_method.detached": {
         const paymentMethod = event.data.object;
-        await deletePaymentMethod(paymentMethod.id);
+
+        await handleDetachedPaymentMethod(
+          paymentMethod.id,
+          paymentMethod.customer,
+        );
+
         logger.info(`Payment method detached: ${paymentMethod.id}`);
         break;
       }
@@ -214,32 +227,58 @@ const handlePaymentSuccess = async (paymentIntent) => {
     if (!userPackage)
       throw new NotFoundError("User Package not found for payment success");
 
-    const invoice = await db
-      .selectFrom("invoices")
+    const paymentMethod = await db
+      .selectFrom("payment_methods")
       .selectAll()
-      .where("id", "=", invoiceId)
+      .where("stripe_payment_method_id", "=", paymentMethodId)
       .executeTakeFirst();
-    if (!invoice)
+    if (!paymentMethod)
       throw new BadRequestError("Invoice not found for payment success");
 
     const isTrial = pkg.trial_days && pkg.trial_days > 0;
 
-    if (!isTrial) {
-      await db
-        .updateTable("invoices")
-        .set({ status: "paid", updated_at: new Date() })
-        .where("id", "=", invoiceId)
-        .execute();
-    }
-
-    const existingPayment = await db
-      .selectFrom("payments")
-      .selectAll()
-      .where("stripe_payment_intent_id", "=", paymentIntent.id)
+    const invoice = await db
+      .updateTable("invoices")
+      .set({
+        status: isTrial ? "trial" : "paid",
+        updated_at: new Date(),
+      })
+      .where("id", "=", invoiceId)
+      .returningAll()
       .executeTakeFirst();
 
-    if (!existingPayment && !isTrial) {
-      await db
+    if (!invoice) {
+      throw new NotFoundError("Invoice not found for payment success");
+    }
+
+    if (isTrial) {
+      if (autoRenew) {
+        await handleSubscriptionCreation(
+          customerId,
+          packageId,
+          autoRenew,
+          paymentMethodId,
+          invoice,
+        );
+      }
+      logger.info(
+        `Trial started for user: ${customerId} | Package: ${packageId} | Invoice: ${invoiceId}`,
+      );
+    } else {
+      const existingPayment = await db
+        .selectFrom("payments")
+        .selectAll()
+        .where("stripe_payment_intent_id", "=", paymentIntent.id)
+        .executeTakeFirst();
+
+      if (existingPayment) {
+        logger.warn(
+          `Duplicate payment detected for PaymentIntent: ${paymentIntent.id}, skipping`,
+        );
+        return;
+      }
+
+      const payment = await db
         .insertInto("payments")
         .values({
           id: generateUUID(),
@@ -247,29 +286,63 @@ const handlePaymentSuccess = async (paymentIntent) => {
           invoice_id: invoice.invoice_number,
           amount: invoice.total,
           currency: paymentIntent.currency,
+          transaction_id: generateTransactionId(),
+          payment_date: new Date(),
           status: "succeeded",
           payment_method: "stripe",
           stripe_payment_intent_id: paymentIntent.id,
           notes: "Payment successful",
         })
-        .execute();
-    }
+        .returning(["transaction_id", "payment_date"])
+        .executeTakeFirstOrThrow();
 
-    if (autoRenew) {
-      await handleSubscriptionCreation(
-        customerId,
-        packageId,
-        autoRenew,
-        paymentMethodId,
-        invoice,
-      );
-      logger.info(
-        `Payment successful for user: ${customerId} | Amount: ${paymentIntent.amount} | Invoice: ${invoiceId} | Subscription Created`,
-      );
-    } else {
-      logger.info(
-        `Payment successful for user: ${customerId} | Amount: ${paymentIntent.amount} | Invoice: ${invoiceId}`,
-      );
+      if (autoRenew) {
+        await handleSubscriptionCreation(
+          customerId,
+          packageId,
+          autoRenew,
+          paymentMethodId,
+          invoice,
+        );
+        logger.info(
+          `Payment successful for user: ${customerId} | Amount: ${paymentIntent.amount} | Invoice: ${invoiceId} | Subscription Created`,
+        );
+      } else {
+        logger.info(
+          `Payment successful for user: ${customerId} | Amount: ${paymentIntent.amount} | Invoice: ${invoiceId}`,
+        );
+      }
+
+      try {
+        const generatedInvoice = await generateInvoicePDF({
+          invoice,
+          paymentMethod,
+          payment,
+          user,
+        });
+
+        const emailTemplate = generateInvoiceEmail({
+          customerName: user.name,
+          invoiceNumber: invoice.invoice_number,
+          invoiceDate: invoice.invoice_date,
+          dueDate: invoice.due_date,
+          totalAmount: invoice.total,
+          status: invoice.status,
+          transactionId: payment?.transaction_id,
+          paymentDate: payment?.payment_date,
+          pdfBuffer: generatedInvoice,
+        });
+
+        await sendEmail({
+          to: user.email,
+          ...emailTemplate,
+        });
+      } catch (emailError) {
+        logger.error(
+          `Failed to send invoice email for user: ${customerId} | Invoice: ${invoiceId}`,
+          emailError,
+        );
+      }
     }
   } catch (error) {
     logger.error("Error handling payment success:", error);
@@ -316,6 +389,8 @@ const handlePaymentFailure = async (paymentIntent) => {
           invoice_id: invoice.invoice_number,
           amount: invoice.total,
           currency: paymentIntent.currency,
+          transaction_id: generateTransactionId(),
+          payment_date: new Date(),
           status: "failed",
           payment_method: "stripe",
           stripe_payment_intent_id: paymentIntent.id,
@@ -492,6 +567,13 @@ const handleInvoiceSuccess = async (stripeInvoice) => {
       return;
     }
 
+    if (stripeInvoice.paid_out_of_band) {
+      logger.info(
+        `Skipping out-of-band invoice ${stripeInvoice.id} — payment already recorded`,
+      );
+      return;
+    }
+
     const SUBSCRIPTION_REASONS = [
       "subscription_cycle",
       "subscription_update",
@@ -585,6 +667,8 @@ const handleInvoiceSuccess = async (stripeInvoice) => {
           user_id: user.id,
           invoice_id: trialInvoice.invoice_number,
           amount: trialInvoice.total,
+          transaction_id: generateTransactionId(),
+          payment_date: new Date(),
           currency: "GBP",
           status: "succeeded",
           payment_method: "stripe",
@@ -606,7 +690,6 @@ const handleInvoiceSuccess = async (stripeInvoice) => {
 
       const invoiceItems = [
         {
-          package_id: pkg.id,
           name: pkg.name,
           description: pkg.description,
           billing_cycle: pkg.billing_cycle,
@@ -727,7 +810,6 @@ const handleInvoiceFailure = async (stripeInvoice) => {
 
     const invoiceItems = [
       {
-        package_id: pkg.id,
         name: pkg.name,
         description: pkg.description,
         billing_cycle: pkg.billing_cycle,
@@ -767,6 +849,8 @@ const handleInvoiceFailure = async (stripeInvoice) => {
           user_id: user.id,
           invoice_id: newInvoice.invoice_number,
           amount: newInvoice.total,
+          transaction_id: generateTransactionId(),
+          payment_date: new Date(),
           currency: "GBP",
           status: "failed",
           payment_method: "stripe",
@@ -791,4 +875,54 @@ const handleInvoiceFailure = async (stripeInvoice) => {
     throw error;
   }
 };
+
+const handleDetachedPaymentMethod = async (stripePmId, stripeCustomerId) => {
+  const user = await db
+    .selectFrom("users")
+    .selectAll()
+    .where("stripe_customer_id", "=", stripeCustomerId)
+    .executeTakeFirst();
+
+  if (!user) return;
+
+  const existing = await db
+    .selectFrom("payment_methods")
+    .selectAll()
+    .where("stripe_payment_method_id", "=", stripePmId)
+    .where("user_id", "=", user.id)
+    .where("is_active", "=", true)
+    .executeTakeFirst();
+
+  if (!existing) return;
+
+  const subscriptions = await stripe.subscriptions.list({
+    customer: stripeCustomerId,
+    status: "active",
+  });
+
+  for (const sub of subscriptions.data) {
+    if (sub.default_payment_method === stripePmId) {
+      await stripe.subscriptions.update(sub.id, {
+        default_payment_method: null,
+      });
+    }
+  }
+
+  await stripe.customers.update(stripeCustomerId, {
+    invoice_settings: {
+      default_payment_method: null,
+    },
+  });
+
+  await db
+    .updateTable("payment_methods")
+    .set({
+      is_active: false,
+      is_default: false,
+      updated_at: new Date(),
+    })
+    .where("stripe_payment_method_id", "=", stripePmId)
+    .execute();
+};
+
 module.exports = { handleWebhook };

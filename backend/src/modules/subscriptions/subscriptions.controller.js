@@ -102,10 +102,6 @@ const updateUserSubscription = async (req, res, next) => {
       throw new BadRequestError("packageId is required");
     }
 
-    if (!paymentMethodId) {
-      throw new BadRequestError("paymentMethodId is required");
-    }
-
     const updatedSubscription = await updateSubscription(
       userId,
       id,

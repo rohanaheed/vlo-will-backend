@@ -169,6 +169,15 @@ const generateInvoiceId = () => {
   return `NV-${currentYear}-${randomNum}`;
 }
 
+const generateTransactionId = () => {
+  const randomPart = crypto
+    .randomBytes(4)
+    .toString("hex")
+    .toUpperCase();
+
+  return `TXN-${randomPart}`;
+}
+
 module.exports = {
   generateUUID,
   generateToken,
@@ -183,5 +192,6 @@ module.exports = {
   retryWithBackoff,
   deepClone,
   isEmpty,
-  generateInvoiceId
+  generateInvoiceId,
+  generateTransactionId
 };

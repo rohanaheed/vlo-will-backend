@@ -39,7 +39,7 @@ const getTransporter = () => {
   return transporter;
 };
 
-const sendEmail = async ({ to, subject, html, text }) => {
+const sendEmail = async ({ to, subject, html, text, attachments = [] }) => {
   const emailTransporter = getTransporter();
 
   if (!emailTransporter) {
@@ -54,6 +54,7 @@ const sendEmail = async ({ to, subject, html, text }) => {
       subject,
       html,
       text,
+      attachments,
     });
 
     logger.info(`Email sent successfully: ${subject} to ${to}`, { messageId: info.messageId });

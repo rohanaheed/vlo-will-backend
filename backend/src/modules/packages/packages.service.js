@@ -13,6 +13,9 @@ const {
   archiveProduct,
   retrieveSubscription,
 } = require("../../utils/stripe");
+const { generateInvoicePDF } = require("../../config/pdf");
+const { sendEmail } = require("../../config/email");
+const { generateInvoiceEmail } = require("../../utils/emailTemplate");
 
 const stripe = getStripe();
 
@@ -561,7 +564,6 @@ const selectPackage = async (packageId, userId) => {
 
   const invoiceItems = [
     {
-      package_id: pkg.id,
       name: pkg.name,
       description: pkg.description,
       billing_cycle: pkg.billing_cycle,
@@ -601,7 +603,6 @@ const selectPackage = async (packageId, userId) => {
       updated_at: new Date(),
     })
     .execute();
-
   logger.info("Package selected and draft invoice created", {
     packageId: pkg.id,
     userId: user.id,

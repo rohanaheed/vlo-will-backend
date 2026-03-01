@@ -4,7 +4,6 @@ const { NotFoundError } = require("../../utils/errors");
 const logger = require("../../utils/logger");
 const crypto = require("crypto");
 const {
-  deleteStripePaymentMethod,
   retrievePaymentMethod,
   updateStripePaymentMethod,
   createOrGetCustomer,
@@ -423,50 +422,18 @@ const deletePaymentMethod = async (id, userId) => {
     .selectAll()
     .where("id", "=", id)
     .where("user_id", "=", userId)
+    .where("is_active", "=", true)
     .executeTakeFirst();
 
   if (!existing) {
     throw new NotFoundError("Payment method not found");
   }
 
-  const user = await db
-    .selectFrom("users")
-    .selectAll()
-    .where("id", "=", userId)
-    .executeTakeFirst();
+  await stripe.paymentMethods.detach(
+    existing.stripe_payment_method_id
+  );
 
-  const subscriptions = await stripe.subscriptions.list({
-    customer: user.stripe_customer_id,
-    status: "active",
-  });
-
-  for (const sub of subscriptions.data) {
-    if (sub.default_payment_method === existing.stripe_payment_method_id) {
-      await stripe.subscriptions.update(sub.id, {
-        default_payment_method: null,
-      });
-    }
-  }
-
-  await stripe.customers.update(user.stripe_customer_id, {
-    invoice_settings: {
-      default_payment_method: null,
-    },
-  });
-
-  await deleteStripePaymentMethod(existing.stripe_payment_method_id);
-
-  await db
-    .updateTable("payment_methods")
-    .set({
-      is_active: false,
-      is_default: false,
-      updated_at: new Date(),
-    })
-    .where("id", "=", id)
-    .execute();
-
-  return { message: "Payment method removed successfully" };
+  return { message: "Payment method removal initiated" };
 };
 
 module.exports = {

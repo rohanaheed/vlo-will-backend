@@ -1,7 +1,6 @@
 const { getStripe } = require("../config/stripe");
 const logger = require("./logger");
 const { db } = require("../db");
-const { pause } = require("pdfkit");
 
 const stripe = getStripe();
 
@@ -121,7 +120,7 @@ const createPrice = async (data, interval, currency) => {
   try {
     const createPrice = await stripe.prices.create({
       product: data.stripe_product_id,
-      unit_amount: data[`price_${interval}`] * 100,
+      unit_amount: Math.round(data[`price_${interval}`] * 100),
       currency: currency.toLowerCase(),
       recurring: {
         interval: interval === "monthly" ? "month" : "year",
@@ -212,15 +211,12 @@ const retrieveSubscription = async (subscriptionId) => {
 const createSubscription = async (data) => {
   try {
     const user = await createOrGetCustomer(data.user);
+    const isTrial = data.trial_days > 0;
     const trialOrAnchor =
       data.trial_days > 0
-        ? { trial_period_days: data.trial_days }
-        : {
-            billing_cycle_anchor: Math.floor(
-              new Date(data.end_date).getTime() / 1000,
-            ),
-          };
-    const createSubscription = await stripe.subscriptions.create({
+    ? { trial_period_days: data.trial_days }
+    : {};
+    const newSubscription = await stripe.subscriptions.create({
       customer: user.id,
       items: data.items.map((item) => ({
         price: item.priceId,
@@ -239,10 +235,29 @@ const createSubscription = async (data) => {
       },
     });
 
+    if (!isTrial && newSubscription.latest_invoice) {
+      const invoiceId =
+        typeof newSubscription.latest_invoice === "string"
+          ? newSubscription.latest_invoice
+          : newSubscription.latest_invoice.id;
+
+      await stripe.invoices.pay(invoiceId, { paid_out_of_band: true });
+
+      const activeSubscription = await stripe.subscriptions.retrieve(
+        newSubscription.id,
+        { expand: ["latest_invoice.payment_intent"] },
+      );
+
+      logger.info(
+        `Stripe subscription for user ${data.user.full_name} created and activated (paid out of band)`,
+      );
+      return activeSubscription;
+    }
+
     logger.info(
       `Stripe subscription for user ${data.user.full_name} is created`,
     );
-    return createSubscription;
+    return newSubscription;
   } catch (error) {
     logger.error("Error creating subscription", error);
     throw error;
@@ -329,7 +344,7 @@ const cancelStripeSubscription = async (subscriptionId) => {
     if (canceledSubscription.status === "canceled") {
       await db
         .updateTable("subscriptions")
-        .set({ auto_renew: false })
+        .set({ status: "canceled", auto_renew: false })
         .where("stripe_subscription_id", "=", subscriptionId)
         .execute();
     }
@@ -353,7 +368,7 @@ const pauseStripeSubscription = async (subscriptionId) => {
     if (pausedSubscription.pause_collection?.behavior === "void") {
       await db
         .updateTable("subscriptions")
-        .set({ auto_renew: false })
+        .set({ status: "paused", auto_renew: false })
         .where("stripe_subscription_id", "=", subscriptionId)
         .execute();
     }
@@ -376,7 +391,7 @@ const resumeStripeSubscription = async (subscriptionId) => {
     if (!resumedSubscription.pause_collection) {
       await db
         .updateTable("subscriptions")
-        .set({ auto_renew: true })
+        .set({ status: "active", auto_renew: true })
         .where("stripe_subscription_id", "=", subscriptionId)
         .execute();
     }
@@ -438,17 +453,6 @@ const updateStripePaymentMethod = async (paymentMethodId, data) => {
     throw error;
   }
 };
-const deleteStripePaymentMethod = async (paymentMethodId) => {
-  try {
-    const deletedPaymentMethod =
-      await stripe.paymentMethods.detach(paymentMethodId);
-    logger.info(`Payment method ${paymentMethodId} deleted`);
-    return deletedPaymentMethod;
-  } catch (error) {
-    logger.error(`Error deleting payment method ${paymentMethodId}:`, error);
-    throw error;
-  }
-};
 
 module.exports = {
   createOrGetCustomer,
@@ -470,5 +474,4 @@ module.exports = {
   retrieveCustomerPaymentMethod,
   updateStripePaymentMethod,
   retrievePaymentMethod,
-  deleteStripePaymentMethod,
 };
