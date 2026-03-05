@@ -1,13 +1,12 @@
 const { z } = require('zod');
 
 const { MARITAL_STATUSES, RELATIONSHIPS } = require('../../utils/constants');
-const { is } = require('zod/locales');
 const uuidSchema = z.string().uuid('Invalid ID format');
   
 // Step 1: Testator
 const step1Schema = z.object({
   id: uuidSchema.optional().nullable(),
-  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
   full_name: z.string().max(255).optional().nullable(),
   known_as: z.string().max(255).optional().nullable(),
   gender: z.enum(['male', 'female', 'trans', 'other']).optional().nullable(),
@@ -36,7 +35,7 @@ const step1Schema = z.object({
 const executorSchema = z.object({
   id: uuidSchema.optional().nullable(),
   executor_type: z.enum(['individual', 'professional']).optional().default('individual'),
-  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
   full_name: z.string().max(255).optional().nullable(),
   business_name: z.string().max(255).optional().nullable(),
   role_title: z.enum(['solicitor', 'accountant', 'manager', 'financial_advisor', 'other']).optional().nullable(),
@@ -55,7 +54,7 @@ const step2Schema = z.object({
 // Step 3: SPOUSE
 const spouseSchema = z.object({
   id: uuidSchema.optional().nullable(),
-  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
   full_name: z.string().max(255).optional().nullable(),
   building_number: z.string().max(50).optional().nullable(),
   building_name: z.string().max(100).optional().nullable(),
@@ -79,7 +78,7 @@ const step3Schema = z.object({
 // STEP 4: CHILDREN, GUARDIANS, TRUSTEES, BENEFICIARIES, CHARITIES
 const childSchema = z.object({
   id: uuidSchema.optional().nullable(),
-  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
   full_name: z.string().min(1).max(255),
   gender: z.enum(['male', 'female', 'trans', 'other']).optional().nullable(),
   date_of_birth: z.string().optional().nullable(),
@@ -97,7 +96,7 @@ const childSchema = z.object({
 
 const guardianSchema = z.object({
   id: uuidSchema.optional().nullable(),
-  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
   full_name: z.string().min(1).max(255),
   date_of_birth: z.string().optional().nullable(),
   relationship_to_testator: z.string().max(100),
@@ -117,8 +116,8 @@ const guardianSchema = z.object({
 
 const trusteeSchema = z.object({
   id: uuidSchema.optional().nullable(),
-  role_type: z.enum(['backup_guardian', 'trustee']).optional(),
-  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  role_type: z.string().optional(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
   full_name: z.string().min(1).max(255).optional(),
   date_of_birth: z.string().optional().nullable(),
   relationship_to_testator: z.enum(Object.values((RELATIONSHIPS))).optional().nullable(),
@@ -148,9 +147,24 @@ const trusteeSchema = z.object({
   additional_powers: z.string().max(2000).optional().nullable(),
 }).passthrough();
 
+const backUpGuardianSchema = z.object({
+  id: uuidSchema.optional().nullable(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
+  full_name: z.string().min(1).max(255),
+  role_type: z.string().optional(),
+  relationship_to_testator: z.enum(Object.values((RELATIONSHIPS))).optional().nullable(),
+  date_of_birth: z.string().optional().nullable(),
+  building_number: z.string().max(50).optional().nullable(),
+  building_name: z.string().max(100).optional().nullable(),
+  street: z.string().max(255).optional().nullable(),
+  town: z.string().max(100).optional().nullable(),
+  city: z.string().max(100).optional().nullable(),
+  county: z.string().max(100).optional().nullable(),
+}).passthrough();
+
 const beneficiarySchema = z.object({
   id: uuidSchema.optional().nullable(),
-  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
   full_name: z.string().min(1).max(255),
   relationship_to_testator: z.enum(Object.values((RELATIONSHIPS))).optional().nullable(),
   building_number: z.string().max(50).optional().nullable(),
@@ -184,6 +198,7 @@ const step4Schema = z.object({
   guardians: z.array(guardianSchema).optional().default([]),
   wants_backup: z.boolean().optional().default(false),
   trustees: z.array(trusteeSchema).optional().default([]),
+  backupGuardians: z.array(backUpGuardianSchema).optional().default([]),
   beneficiaries: z.array(beneficiarySchema).optional().default([]),
   has_charity: z.boolean().optional().default(false),
   charities: z.array(charitySchema).optional().default([]),
@@ -256,7 +271,7 @@ const step5Schema = z.object({
   bank_accounts: z.array(bankAccountsSchema).default([]),
   has_investment: z.boolean().optional().default(false),
   investments: z.array(investmentsSchema).default([]),
-  has_valuable_items: z.boolean().optional().default(false),
+  has_valuable_item: z.boolean().optional().default(false),
   valuable_items: z.array(valuableItemsSchema).default([]),
   has_digital_asset: z.boolean().optional().default(false),
   digital_assets: z.array(digitalAssetsSchema).default([]),
@@ -323,7 +338,7 @@ const funeralSchema = z.object({
   payment_priority: z.string().max(255).optional().nullable(),
   provider_name: z.string().max(255).optional().nullable(),
   policy_number: z.string().max(255).optional().nullable(),
-  title: z.enum(['Mr','Mrs','Ms','Dr','Miss','Mx']).optional().nullable(),
+  title: z.enum(['Mr','Mrs','Ms','Dr','Miss','Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
   holder_name: z.string().max(255).optional().nullable(),
   coverage_amount: z.number().optional().nullable(),
   phone_country_code: z.string().max(10).optional().nullable(),
@@ -354,7 +369,7 @@ const step9Schema = z.object({
 // STEP 10: WITNESScES
 const witnessSchema = z.object({
   id: uuidSchema.optional().nullable(),
-  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
   full_name: z.string().min(1).max(255),
   building_number: z.string().max(50).optional().nullable(),
   building_name: z.string().max(100).optional().nullable(),
@@ -370,7 +385,7 @@ const witnessSchema = z.object({
 
 const step10Schema = z.object({
   id: uuidSchema.optional().nullable(),
-  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx']).optional().nullable(),
+  title: z.enum(['Mr', 'Mrs', 'Ms', 'Dr', 'Miss', 'Mx', 'Prof', 'Rev', 'Other']).optional().nullable(),
   full_name: z.string().min(1).max(255),
   date: z.string().optional().nullable(),
   have_witness: z.boolean().optional().default(false),

@@ -12,11 +12,12 @@ const packagesWriteLimiter = createLimiter({
   message: "Too many package write requests, please try again later",
 });
 
-router.use(authenticate);
-
+// Public routes
 router.get("/", packagesController.getPackages);
-
 router.get("/:id", packagesController.getPackageById);
+
+// Protected routes
+router.use(authenticate);
 
 router.post(
   "/create-package",
