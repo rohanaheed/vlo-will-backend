@@ -196,7 +196,7 @@ const updateStep = async (willId, step, userId, userRole) => {
 /**
  * Mark will as completed
  */
-const completeWill = async (willId, userId, userRole) => {
+const completeWill = async (willId, userId, userRole, data = {}) => {
   const will = await getWillById(willId, userId, userRole);
 
   if (will.status === WILL_STATUSES.COMPLETED || will.status === WILL_STATUSES.SIGNED) {
@@ -205,17 +205,44 @@ const completeWill = async (willId, userId, userRole) => {
 
   // TODO: Validate that all required steps are filled
 
+  const updateData = {
+    status: WILL_STATUSES.COMPLETED,
+    updated_at: new Date(),
+  };
+
+  if (data?.pdf_path) {
+    updateData.pdf_path = data.pdf_path;
+  }
+
   const updatedWill = await db
     .updateTable('wills')
-    .set({
-      status: WILL_STATUSES.COMPLETED,
-      updated_at: new Date(),
-    })
+    .set(updateData)
     .where('id', '=', willId)
-    .returning(['id', 'status', 'updated_at'])
+    .returning(['id', 'status', 'pdf_path', 'updated_at'])
     .executeTakeFirst();
 
   logger.info('Will completed', { willId, userId });
+
+  return updatedWill;
+};
+
+/**
+ * Save PDF path to will (for download)
+ */
+const savePdfPath = async (willId, pdfPath, userId, userRole) => {
+  const will = await getWillById(willId, userId, userRole);
+
+  const updatedWill = await db
+    .updateTable('wills')
+    .set({
+      pdf_path: pdfPath,
+      updated_at: new Date(),
+    })
+    .where('id', '=', willId)
+    .returning(['id', 'pdf_path', 'updated_at'])
+    .executeTakeFirst();
+
+  logger.info('PDF path saved', { willId, userId, pdfPath });
 
   return updatedWill;
 };
@@ -330,6 +357,7 @@ module.exports = {
   updateWill,
   updateStep,
   completeWill,
+  savePdfPath,
   deleteWill,
   getWillSummary,
 };

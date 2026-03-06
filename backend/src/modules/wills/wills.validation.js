@@ -48,11 +48,23 @@ const completeWillSchema = {
   params: z.object({
     id: uuidSchema,
   }),
+  body: z.object({
+    pdf_path: z.string().optional(),
+  }).optional(),
 };
 
 const deleteWillSchema = {
   params: z.object({
     id: uuidSchema,
+  }),
+};
+
+const savePdfPathSchema = {
+  params: z.object({
+    id: uuidSchema,
+  }),
+  body: z.object({
+    pdf_path: z.string().min(1),
   }),
 };
 
@@ -74,6 +86,7 @@ module.exports = {
   updateStepSchema,
   completeWillSchema,
   deleteWillSchema,
+  savePdfPathSchema,
   addressSchema,
   uuidSchema,
 };

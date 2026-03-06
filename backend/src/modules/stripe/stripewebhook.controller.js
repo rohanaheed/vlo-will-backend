@@ -293,8 +293,26 @@ const handlePaymentSuccess = async (paymentIntent) => {
           stripe_payment_intent_id: paymentIntent.id,
           notes: "Payment successful",
         })
-        .returning(["transaction_id", "payment_date"])
+        .returning(["id", "transaction_id", "payment_date"])
         .executeTakeFirstOrThrow();
+
+      // Update will is_paid, paid_at, payment_id for this user
+      try {
+        await db
+          .updateTable("wills")
+          .set({
+            is_paid: true,
+            paid_at: new Date(),
+            payment_id: payment.id,
+            updated_at: new Date(),
+          })
+          .where("user_id", "=", user.id)
+          .where("status", "!=", "completed")
+          .execute();
+        logger.info(`Will marked as paid for user: ${user.id}`);
+      } catch (willUpdateErr) {
+        logger.warn(`Could not update will is_paid for user ${user.id}:`, willUpdateErr.message);
+      }
 
       if (autoRenew) {
         await handleSubscriptionCreation(
@@ -441,6 +459,11 @@ const handleSubscriptionCreation = async (
       endDate.setMonth(endDate.getMonth() + 1);
     } else if (billingCycle === "yearly") {
       endDate.setFullYear(endDate.getFullYear() + 1);
+    } else if (billingCycle === "one_time") {
+      logger.info(
+        `Skipping subscription creation for one-time package: ${packageId}`,
+      );
+      return;
     } else {
       throw new BadRequestError(`Invalid billing cycle: ${pkg.billing_cycle}`);
     }
@@ -682,7 +705,11 @@ const handleInvoiceSuccess = async (stripeInvoice) => {
       );
     } else {
       const price =
-        pkg.billing_cycle === "monthly" ? pkg.price_monthly : pkg.price_yearly;
+        pkg.billing_cycle === "monthly"
+          ? pkg.price_monthly
+          : pkg.billing_cycle === "yearly"
+            ? pkg.price_yearly
+            : pkg.price_one_time;
       const subtotal = price * 1;
       const discountAmount =
         pkg.discount > 0 ? (subtotal * pkg.discount) / 100 : 0;
@@ -795,12 +822,18 @@ const handleInvoiceFailure = async (stripeInvoice) => {
     if (existingPayment) return;
 
     const price =
-      pkg.billing_cycle === "monthly" ? pkg.price_monthly : pkg.price_yearly;
+      pkg.billing_cycle === "monthly"
+        ? pkg.price_monthly
+        : pkg.billing_cycle === "yearly"
+          ? pkg.price_yearly
+          : pkg.price_one_time;
     const dueDate = new Date();
     if (pkg.billing_cycle === "monthly") {
       dueDate.setMonth(dueDate.getMonth() + 1);
-    } else {
+    } else if (pkg.billing_cycle === "yearly") {
       dueDate.setFullYear(dueDate.getFullYear() + 1);
+    } else {
+      dueDate.setDate(dueDate.getDate() + 30);
     }
 
     const subtotal = price;

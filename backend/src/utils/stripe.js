@@ -142,6 +142,28 @@ const createPrice = async (data, interval, currency) => {
   }
 };
 
+const createOneTimePrice = async (data,currency) => {
+  try {
+    const oneTimePrice = await stripe.prices.create({
+      product: data.stripe_product_id,
+      unit_amount: Math.round(data.price_one_time * 100),
+      currency: currency.toLowerCase(),
+      active: true
+    })
+
+    await db
+    .updateTable("packages")
+    .set({ stripe_price_one_time_id: oneTimePrice.id })
+    .where("id", "=", data.id)
+    .execute()
+
+    logger.info(`Stripe one time price for package ${data.name} is created`)
+    return oneTimePrice
+  } catch (error) {
+    logger.error("Error creating one time price:", error)
+    throw error;
+  }
+}
 const archivePrice = async (priceId) => {
   try {
     const archivedPrice = await stripe.prices.update(priceId, {
@@ -462,6 +484,7 @@ module.exports = {
   deleteProduct,
   archiveProduct,
   createPrice,
+  createOneTimePrice,
   archivePrice,
   createCoupon,
   deleteCoupon,

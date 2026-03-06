@@ -145,7 +145,8 @@ const completeWill = async (req, res, next) => {
     const will = await willsService.completeWill(
       req.params.id,
       req.user.id,
-      req.user.role_name
+      req.user.role_name,
+      req.body
     );
 
     await createAuditLog({
@@ -198,6 +199,25 @@ const deleteWill = async (req, res, next) => {
   }
 };
 
+/**
+ * Save PDF path
+ * PUT /api/v1/wills/:id/pdf-path
+ */
+const savePdfPath = async (req, res, next) => {
+  try {
+    const will = await willsService.savePdfPath(
+      req.params.id,
+      req.body.pdf_path,
+      req.user.id,
+      req.user.role_name
+    );
+
+    return sendSuccess(res, { will }, 'PDF path saved successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getWills,
   getWillById,
@@ -206,5 +226,6 @@ module.exports = {
   updateStep,
   getWillSummary,
   completeWill,
+  savePdfPath,
   deleteWill,
 };

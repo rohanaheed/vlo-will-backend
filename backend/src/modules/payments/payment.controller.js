@@ -11,7 +11,7 @@ const stripe = getStripe();
 
 const processPayment = async (req, res) => {
   try {
-    const { paymentMethodId, autoRenew = true } = req.body;
+    const { paymentMethodId, autoRenew } = req.body;
 
     const paymentMethod = await db
       .selectFrom("payment_methods")

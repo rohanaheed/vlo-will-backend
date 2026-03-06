@@ -189,6 +189,17 @@ router.post(
 );
 
 /**
+ * @route   PUT /api/v1/wills/:id/pdf-path
+ * @desc    Save PDF path for will
+ * @access  Private
+ */
+router.put(
+  '/:id/pdf-path',
+  validate(willsValidation.savePdfPathSchema),
+  willsController.savePdfPath
+);
+
+/**
  * @route   POST /api/v1/wills/:id/complete
  * @desc    Mark will as completed
  * @access  Private

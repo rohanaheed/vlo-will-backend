@@ -12,6 +12,7 @@ const {
   archivePrice,
   archiveProduct,
   retrieveSubscription,
+  createOneTimePrice,
 } = require("../../utils/stripe");
 const { generateInvoicePDF } = require("../../config/pdf");
 const { sendEmail } = require("../../config/email");
@@ -88,8 +89,10 @@ const createPackage = async (data, currentUser) => {
 
     if (refreshedPkg.billing_cycle === "monthly") {
       await createPrice(refreshedPkg, "monthly", "GBP");
-    } else {
+    } else if (refreshedPkg.billing_cycle === "yearly") {
       await createPrice(refreshedPkg, "yearly", "GBP");
+    } else {
+      await createOneTimePrice(refreshedPkg, "GBP");
     }
 
     if (refreshedPkg.discount > 0) {
@@ -122,9 +125,48 @@ const updatePackage = async (packageId, updateData, currentUser) => {
 
   const existingBillingCycle = existing.billing_cycle;
   const updatedBillingCycle = updated.billing_cycle;
-
+  const isOneTime = updatedBillingCycle === "one_time";
+  const oneTimePriceChanged = existing.price !== updated.price;
   if (updated.subscription_type === "paid") {
     await updateProduct(updated);
+    if (isOneTime) {
+      if (existing.stripe_price_monthly_id)
+        await archivePrice(existing.stripe_price_monthly_id);
+
+      if (existing.stripe_price_yearly_id)
+        await archivePrice(existing.stripe_price_yearly_id);
+
+      if (oneTimePriceChanged && existing.stripe_price_one_time_id) {
+        await archivePrice(existing.stripe_price_one_time_id);
+
+        await db
+          .updateTable("packages")
+          .set({ stripe_price_one_time_id: null })
+          .where("id", "=", packageId)
+          .execute();
+      }
+
+      if (!existing.stripe_price_one_time_id || oneTimePriceChanged) {
+        await createOneTimePrice(updated, "GBP");
+      }
+
+      await db
+        .updateTable("packages")
+        .set({
+          stripe_price_monthly_id: null,
+          stripe_price_yearly_id: null,
+          updated_at: new Date(),
+        })
+        .where("id", "=", packageId)
+        .execute();
+      logger.info("Package updated (one-time billing)", {
+        packageId,
+        updatedBy: currentUser.id,
+      });
+
+      return await getPackageById(packageId);
+    }
+
     let didSwitchCycle = false;
 
     if (
@@ -507,7 +549,9 @@ const deletePackage = async (packageId, currentUser) => {
     await archivePrice(pkg.stripe_price_monthly_id);
   if (pkg.stripe_price_yearly_id)
     await archivePrice(pkg.stripe_price_yearly_id);
-
+  if (pkg.stripe_price_one_time_id) {
+    await archivePrice(pkg.stripe_price_one_time_id);
+  }
   if (pkg.stripe_coupon_id) await deleteCoupon(pkg.stripe_coupon_id);
 
   if (pkg.stripe_product_id) await archiveProduct(pkg.stripe_product_id);
@@ -551,11 +595,17 @@ const selectPackage = async (packageId, userId) => {
     .executeTakeFirst();
 
   const price =
-    pkg.billing_cycle === "monthly" ? pkg.price_monthly : pkg.price_yearly;
+  pkg.billing_cycle === "monthly"
+    ? pkg.price_monthly
+    : pkg.billing_cycle === "yearly"
+    ? pkg.price_yearly
+    : pkg.price_one_time;
   const stripe_price_id =
-    pkg.billing_cycle === "monthly"
-      ? pkg.stripe_price_monthly_id
-      : pkg.stripe_price_yearly_id;
+  pkg.billing_cycle === "monthly"
+    ? pkg.stripe_price_monthly_id
+    : pkg.billing_cycle === "yearly"
+    ? pkg.stripe_price_yearly_id
+    : pkg.stripe_price_one_time_id;
 
   const quantity = 1;
   const subtotal = price * quantity;
@@ -571,7 +621,7 @@ const selectPackage = async (packageId, userId) => {
       stripe_price_id,
       quantity,
       subtotal,
-      discount_percentage: `${pkg.discount}%}`,
+      discount_percentage: `${pkg.discount}%`,
       discount_amount: discountAmount,
     },
   ];
@@ -579,8 +629,10 @@ const selectPackage = async (packageId, userId) => {
   const dueDate = new Date();
   if (pkg.billing_cycle === "monthly") {
     dueDate.setMonth(dueDate.getMonth() + 1);
-  } else {
+  } else if (pkg.billing_cycle === "yearly") {
     dueDate.setFullYear(dueDate.getFullYear() + 1);
+  } else {
+    dueDate.setDate(dueDate.getDate() + 30);
   }
 
   const invoiceNumber = generateInvoiceId();
