@@ -31,8 +31,9 @@ will-be/
 │   │   │   ├── roles/       # Role management
 │   │   │   ├── permissions/ # Permission management
 │   │   │   ├── wills/       # Will management + step handling
-│   │   │   ├── testators/   # Testator information
-│   │   │   └── executors/   # Executor management
+    │   │   │   ├── testators/   # Testator information
+    │   │   │   ├── executors/   # Executor management
+    │   │   │   └── form-builder/ # Dynamic form builder (admin + user)
 │   │   ├── routes/          # Route aggregation
 │   │   └── utils/           # Utilities (logger, errors, helpers)
 │   ├── .env                 # Environment variables
@@ -78,6 +79,7 @@ npm run dev
 | `npm run migrate:reset` | Reset and re-run all migrations |
 | `npm run seed` | Run database seeds |
 | `npm run db:setup` | Run migrations + seeds |
+| `npm run admin:publish-form <slug>` | Publish a form template |
 | `npm run db:reset` | Reset migrations + re-seed |
 
 ## API Endpoints
@@ -785,6 +787,65 @@ EMAIL_FROM=noreply@willbe.com
 # Frontend
 FRONTEND_URL=http://localhost:3001
 ```
+
+---
+
+## Form Builder System
+
+The platform includes a dynamic form builder that allows admins to create, edit, and manage will forms without code changes.
+
+### Admin API (`/api/v1/admin/form-builder`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/` | Create form template |
+| GET | `/` | List all forms |
+| GET | `/:id` | Get form by ID |
+| GET | `/:id/full` | Get form with steps/fields |
+| PUT | `/:id` | Update form |
+| DELETE | `/:id` | Delete form |
+| POST | `/:id/clone` | Clone form |
+| POST | `/:id/publish` | Publish form |
+| POST | `/:id/unpublish` | Unpublish form |
+| GET | `/:id/versions` | Get version history |
+| POST | `/:id/versions/:versionId/restore` | Restore to version |
+| POST | `/:formId/steps` | Create step |
+| PUT | `/:formId/steps/:stepId` | Update step |
+| PUT | `/:formId/steps/reorder` | Reorder steps |
+| POST | `/:formId/steps/:stepId/fields` | Create field |
+| PUT | `/:formId/steps/:stepId/fields/:fieldId` | Update field |
+| PUT | `/:formId/steps/:stepId/fields/reorder` | Reorder fields |
+
+### User API (Dynamic Forms)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/wills/:id/form` | Get form structure |
+| GET | `/api/v1/wills/:id/progress` | Get progress |
+| GET | `/api/v1/wills/:id/form/:stepSlug` | Get step data |
+| PUT | `/api/v1/wills/:id/form/:stepSlug` | Save step data |
+
+### Field Types
+
+The form builder supports 28 field types:
+
+- **Basic:** text, textarea, number, decimal, email, phone, password
+- **Date/Time:** date, time, datetime
+- **Selection:** select, multi_select, radio, checkbox, checkbox_group, toggle
+- **Files:** file, image, signature
+- **Special:** address, currency, percentage, url, hidden
+- **Layout:** heading, paragraph, divider
+- **Advanced:** repeater (for arrays like executors, children)
+
+### Version Control
+
+- Every publish creates a new version with full snapshot
+- Can restore to any previous version
+- User wills are locked to specific form version after payment
+
+### Legacy Table Mapping
+
+Dynamic forms can map fields to existing legacy tables (testators, executors, etc.) for backward compatibility. Configure `legacy_table` and `legacy_column` on fields.
 
 ---
 

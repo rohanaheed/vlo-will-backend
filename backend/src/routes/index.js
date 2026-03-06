@@ -19,6 +19,7 @@ const paymentRoutes = require('../modules/payments/payment.routes')
 const stripeWebhookRoutes = require('../modules/stripe/stripewebhook.routes')
 const subscriptionRoutes = require('../modules/subscriptions/subscriptions.routes')
 const invoiceRoutes = require('../modules/invoices/invoice.routes')
+const formBuilderRoutes = require('../modules/form-builder/form-builder.routes');
 
 const router = express.Router();
 
@@ -92,6 +93,10 @@ router.use(`${API_PREFIX}/subscriptions`, subscriptionRoutes)
 
 // Invoice Routes
 router.use(`${API_PREFIX}/invoices`, invoiceRoutes)
+
+// Form Builder Routes (Admin only)
+router.use(`${API_PREFIX}/admin/form-builder`, formBuilderRoutes);
+
 // Admin routes
 // router.use(`${API_PREFIX}/admin`, adminRoutes);
 
