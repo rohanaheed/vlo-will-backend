@@ -17,7 +17,8 @@ const {
 const { ROLE_IDS } = require("../../db/seeds/001_roles");
 const logger = require("../../utils/logger");
 const { OAuth2Client } = require("google-auth-library");
-
+const crypto = require('crypto');
+const { send } = require("process");
 const googleClient = new OAuth2Client(config.google.clientId);
 
 const SALT_ROUNDS = 12;
@@ -222,8 +223,11 @@ const forgotPassword = async (email) => {
     .values({
       id: generateUUID(),
       user_id: user.id,
+      type:"token",
+      otp:null,
       token: hashedToken,
       expires_at: new Date(Date.now() + 60 * 60 * 1000),
+      updated_at: new Date(),
       created_at: new Date(),
     })
     .execute();
@@ -272,6 +276,7 @@ const resendPasswordReset = async (email) => {
     .select(["expires_at"])
     .where("user_id", "=", user.id)
     .where("used_at", "is", null)
+    .where("type", "=", "token")
     .executeTakeFirst();
 
   // If there's an active token that hasn't expired, don't allow resend yet
@@ -286,6 +291,7 @@ const resendPasswordReset = async (email) => {
     .deleteFrom("password_resets")
     .where("user_id", "=", user.id)
     .where("used_at", "is", null)
+    .where("type", "=", "token")
     .execute();
 
   // Create new reset token
@@ -298,6 +304,8 @@ const resendPasswordReset = async (email) => {
     .values({
       id: generateUUID(),
       user_id: user.id,
+      otp:null,
+      type:"token",
       token: hashedToken,
       expires_at: new Date(Date.now() + 60 * 60 * 1000),
       created_at: new Date(),
@@ -335,6 +343,7 @@ const resetPassword = async (token, newPassword) => {
     .selectFrom("password_resets")
     .select(["id", "user_id", "expires_at", "used_at"])
     .where("token", "=", hashedToken)
+    .where("type", "=", "token")
     .executeTakeFirst();
 
   if (!resetRecord) {
@@ -730,6 +739,153 @@ const verifyRecaptcha = async (recaptchaToken, ip) => {
   }
 };
 
+const sendOtp = async (email) => {
+
+  const user = await db
+    .selectFrom("users")
+    .selectAll()
+    .where("email", "=", email)
+    .executeTakeFirst();
+
+  if (!user) {
+    logger.warn("OTP requested for non-existent email", { email });
+    return;
+  }
+
+  const existingOtp = await db
+    .selectFrom("password_resets")
+    .selectAll()
+    .where("user_id", "=", user.id)
+    .where("type", "=", "otp")
+    .where("used_at", "is", null)
+    .executeTakeFirst();
+
+  if (existingOtp) {
+
+    const isExpired = new Date() > existingOtp.expires_at;
+
+    if (!isExpired) {
+      const diff = Date.now() - new Date(existingOtp.updated_at).getTime();
+
+      if (diff < 30000) {
+        throw new Error("Please wait before requesting another OTP");
+      }
+    }
+
+    await db
+      .deleteFrom("password_resets")
+      .where("user_id", "=", user.id)
+      .where("type", "=", "otp")
+      .execute();
+  }
+
+  const otp = crypto.randomInt(100000, 999999).toString();
+
+  const hashOtp = hashToken(otp);
+
+  await db
+    .insertInto("password_resets")
+    .values({
+      id: generateUUID(),
+      user_id: user.id,
+      type: "otp",
+      otp: hashOtp,
+      token: null,
+      expires_at: new Date(Date.now() + 5 * 60 * 1000),
+      created_at: new Date(),
+      updated_at: new Date(),
+    })
+    .execute();
+
+  await sendEmail({
+    to: user.email,
+    subject: "Password Reset OTP",
+    html: `
+      <h2>Password Reset</h2>
+      <p>Hello ${user.name},</p>
+      <p>Your OTP is:</p>
+      <h1>${otp}</h1>
+      <p>This code expires in 5 minutes.</p>
+    `,
+    text: `Your OTP is ${otp}`,
+  });
+
+  logger.info("OTP sent", { userId: user.id });
+};
+
+const verifyOtp = async (email, otp) => {
+
+  const user = await db
+    .selectFrom("users")
+    .select(["id"])
+    .where("email", "=", email)
+    .executeTakeFirst();
+
+  if (!user) return false;
+
+  const record = await db
+    .selectFrom("password_resets")
+    .selectAll()
+    .where("user_id", "=", user.id)
+    .where("type", "=", "otp")
+    .where("used_at", "is", null)
+    .executeTakeFirst();
+
+  if (!record) return false;
+
+  if (new Date() > record.expires_at) {
+
+    await db
+      .deleteFrom("password_resets")
+      .where("id", "=", record.id)
+      .execute();
+
+    logger.warn("OTP expired", { email });
+
+    return false;
+  }
+
+  const hashedInput = hashToken(otp);
+
+  if (hashedInput !== record.otp) {
+    logger.warn("Invalid OTP", { email });
+    return false;
+  }
+
+  await db
+    .updateTable("password_resets")
+    .set({ used_at: new Date() })
+    .where("id", "=", record.id)
+    .execute();
+
+  logger.info("OTP verified", { email });
+
+  return true;
+};
+
+const changePasswordAdmin = async (email, new_password) => {
+  const user = await db
+    .selectFrom("users")
+    .selectAll()
+    .where("email", "=", email)
+    .executeTakeFirst();
+  if(!user){
+    throw new NotFoundError("User");
+  }
+  
+  const hashedPassword = await bcrypt.hash(new_password, SALT_ROUNDS);
+  await db
+    .updateTable("users")
+    .set({
+      password_hash: hashedPassword,
+      updated_at: new Date(),
+    })
+    .where("id", "=", user.id)
+    .execute();
+    
+    logger.info("Password Changed Sucessfully", { userId: user.id, email })
+    return true;
+}
 module.exports = {
   register,
   login,
@@ -744,4 +900,7 @@ module.exports = {
   getCurrentUser,
   googleLogin,
   verifyRecaptcha,
+  sendOtp,
+  verifyOtp,
+  changePasswordAdmin,
 };

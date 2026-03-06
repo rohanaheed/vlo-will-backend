@@ -686,6 +686,39 @@ const saveTrustees = async (trx, beneficiaryId, trustees = []) => {
     .execute();
 };
 
+const saveBackupGuardians = async (trx, beneficiaryId, backupGuardians = []) => {
+  await trx
+    .deleteFrom("backup_guardians")
+    .where("beneficiary_id", "=", beneficiaryId)
+    .execute();
+
+  if (!backupGuardians.length) return;
+
+  await trx
+    .insertInto("backup_guardians")
+    .values(
+      backupGuardians.map((b, index) => ({
+        id: b.id || generateUUID(),
+        beneficiary_id: beneficiaryId,
+        title: b.title,
+        full_name: b.full_name,
+        role_type: 'backup_guardian',
+        relationship_to_testator: b.relationship_to_testator,
+        date_of_birth: b.date_of_birth,
+        building_number: b.building_number,
+        building_name: b.building_name,
+        city: b.city,
+        county: b.county,
+        postcode: b.postcode,
+        country: b.country,
+        order_index: index + 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+    )
+    .execute();
+};
+
 const saveBeneficiaries = async (trx, beneficiaryId, beneficiaries = []) => {
   await trx
     .deleteFrom("beneficiaries")
@@ -759,6 +792,7 @@ const saveBeneficiary = async (trx, willId, data) => {
     guardians,
     wants_backup,
     trustees,
+    backupGuardians,
     beneficiaries,
     has_charity,
     charities,
@@ -815,10 +849,12 @@ const saveBeneficiary = async (trx, willId, data) => {
   }
 
   // Trustees
-  if (wants_backup) {
+  if (wants_backup ) {
     await saveTrustees(trx, beneficiaryId, trustees);
+    await saveBackupGuardians(trx, beneficiaryId, backupGuardians);
   } else {
     await saveTrustees(trx, beneficiaryId, []);
+    await saveBackupGuardians(trx, beneficiaryId, []);
   }
 
   // Beneficiaries (always saved)

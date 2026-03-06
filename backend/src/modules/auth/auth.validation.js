@@ -1,4 +1,4 @@
-const { z } = require('zod');
+const { z, email } = require('zod');
 
 const registerSchema = {
   body: z.object({
@@ -78,6 +78,28 @@ const refreshTokenSchema = {
   }),
 };
 
+const sendOtpSchema = z.object({
+  email: z.string().email('Invalid email address').toLowerCase().trim(),
+})
+
+const verifyOtpSchema = z.object({
+  email: z.string().email('Invalid email address').toLowerCase().trim(),
+  otp: z.string().min(6, 'OTP must be of 6 characters').max(6)
+})
+
+const changeAdminPasswordSchema = {
+  body: z.object({
+    email: z.string().email('Invalid email address').toLowerCase().trim(),
+    new_password: z
+      .string()
+      .min(8, 'Password must be at least 8 characters')
+      .regex(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
+        'Password must contain uppercase, lowercase, number and special character'
+      ),
+  })
+}
+
 module.exports = {
   registerSchema,
   loginSchema,
@@ -88,4 +110,7 @@ module.exports = {
   resendVerificationEmailSchema,
   changePasswordSchema,
   refreshTokenSchema,
+  sendOtpSchema,
+  verifyOtpSchema,
+  changeAdminPasswordSchema
 };

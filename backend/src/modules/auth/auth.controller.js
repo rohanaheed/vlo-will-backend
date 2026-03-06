@@ -289,6 +289,51 @@ const verifyRecaptcha = async (req, res, next) => {
   }
 };
 
+const sendOtp = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    await authService.sendOtp(email);
+
+    return sendSuccess(
+      res,
+      null,
+      "OTP sent. Check your email."
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+const verifyOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    const isValid = await authService.verifyOtp(email, otp);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    return sendSuccess(res, { verified: true }, "OTP verified");
+  } catch (error) {
+    next(error);
+  }
+};
+
+const changePasswordAdmin = async (req, res, next) => {
+  try {
+    const { email, new_password } = req.body;
+    await authService.changePasswordAdmin(email, new_password);
+
+    return sendSuccess(res, null, "Password changed successfully");
+  } catch (error) {
+    next(error);
+  }
+}
 module.exports = {
   register,
   login,
@@ -303,4 +348,7 @@ module.exports = {
   changePassword,
   googleLogin,
   verifyRecaptcha,
+  sendOtp,
+  verifyOtp,
+  changePasswordAdmin,
 };

@@ -96,7 +96,7 @@ const deletePackage = async (req, res, next) => {
       userAgent: req.get("User-Agent"),
     });
 
-    return sendNoContent(res);
+    return sendSuccess(res, {}, "Package deleted successfully");
   } catch (error) {
     next(error);
   }

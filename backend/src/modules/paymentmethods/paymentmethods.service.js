@@ -67,12 +67,10 @@ const createPaymentMethod = async (data, userId) => {
     throw new NotFoundError("User not found");
   }
 
-  if (!user.stripe_customer_id) {
-    const customer = await createOrGetCustomer(user);
-    await stripe.paymentMethods.attach(data.stripe_payment_method_id, {
-      customer: customer.id,
-    });
-  }
+  const customer = await createOrGetCustomer(user);
+  await stripe.paymentMethods.attach(data.stripe_payment_method_id, {
+    customer: customer.id,
+  });
 
   const stripePM = await retrievePaymentMethod(data.stripe_payment_method_id);
 

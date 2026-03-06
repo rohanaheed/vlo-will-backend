@@ -157,4 +157,24 @@ router.post(
   authLimiter,
   authController.googleLogin);
 
+router.post(
+  '/send-otp',
+  passwordResetLimiter,
+  validate(authValidation.sendOtpSchema),
+  authController.sendOtp
+)  
+
+router.post(
+  '/verify-otp',
+  passwordResetLimiter,
+  validate(authValidation.verifyOtpSchema),
+  authController.verifyOtp
+)
+
+router.post(
+  '/change-admin-password',
+  passwordResetLimiter,
+  validate(authValidation.changeAdminPasswordSchema),
+  authController.changePasswordAdmin
+)
 module.exports = router;
