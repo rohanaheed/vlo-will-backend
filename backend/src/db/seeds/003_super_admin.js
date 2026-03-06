@@ -26,14 +26,14 @@ const seed = async (db) => {
   const passwordHash = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 12);
 
   // Create super admin user
+  // Using name field (after migration 035 removed first_name/last_name)
   await db
     .insertInto('users')
     .values({
       id: uuidv4(),
       email: SUPER_ADMIN_EMAIL,
       password_hash: passwordHash,
-      first_name: 'Super',
-      last_name: 'Admin',
+      name: 'Super Admin',
       is_active: true,
       is_email_verified: true,
       email_verified_at: new Date(),

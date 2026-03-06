@@ -12,6 +12,7 @@
     "seed": "node backend/src/db/seeds/index.js",
     "db:setup": "npm run migrate && npm run seed",
     "db:reset": "npm run migrate:reset && npm run seed",
+    "admin:publish-form": "node backend/src/scripts/publish-form.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

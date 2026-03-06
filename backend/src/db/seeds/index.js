@@ -11,6 +11,7 @@ const { db } = require('../../config/database');
 const { seed: seedRoles } = require('./001_roles');
 const { seed: seedPermissions } = require('./002_permissions');
 const { seed: seedSuperAdmin } = require('./003_super_admin');
+const { seed: seedGeneralWillForm } = require('./004_general_will_form');
 
 const runSeeds = async () => {
   try {
@@ -24,6 +25,9 @@ const runSeeds = async () => {
 
     console.log('\nSeeding super admin...');
     await seedSuperAdmin(db);
+
+    console.log('\nSeeding General Will form template...');
+    await seedGeneralWillForm(db);
 
     console.log('\n✓ All seeds completed successfully!');
   } catch (error) {

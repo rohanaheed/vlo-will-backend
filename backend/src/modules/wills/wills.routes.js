@@ -5,6 +5,7 @@ const willsValidation = require('./wills.validation');
 const stepValidation = require('./wills.step.validation');
 const { validate } = require('../../middleware/validate');
 const { authenticate } = require('../../middleware/auth');
+const formResponseRoutes = require('../form-builder/form-response.routes');
 
 const router = express.Router();
 
@@ -209,5 +210,20 @@ router.delete(
   validate(willsValidation.deleteWillSchema),
   willsController.deleteWill
 );
+
+/**
+ * =============================================================
+ * DYNAMIC FORM ENDPOINTS (New Form Builder System)
+ * =============================================================
+ * 
+ * These routes use the dynamic form system where forms are
+ * defined by admins via the form builder.
+ * 
+ * GET  /api/v1/wills/:id/form           - Get form structure
+ * GET  /api/v1/wills/:id/progress       - Get progress
+ * GET  /api/v1/wills/:id/form/:stepSlug - Get step data
+ * PUT  /api/v1/wills/:id/form/:stepSlug - Save step data
+ */
+router.use('/:willId', formResponseRoutes);
 
 module.exports = router;
