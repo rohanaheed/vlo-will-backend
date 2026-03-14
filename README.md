@@ -46,27 +46,87 @@ will-be/
 ### Prerequisites
 
 - Node.js 18+
-- PostgreSQL database (or Neon account)
+- PostgreSQL database (or Neon account), or Docker for local Postgres
 
-### Installation
+### Complete setup (with Docker)
+
+If you have Docker installed, the fastest way to run the project:
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 npm install
 
-# Configure environment
+# 2. Copy environment (already has defaults for Docker Postgres)
 cp backend/.env.example backend/.env
-# Edit backend/.env with your database URL and secrets
 
-# Run migrations
+# 3. Start PostgreSQL
+docker compose up -d
+
+# 4. Run migrations and seed
 npm run migrate
-
-# Seed initial data (roles, permissions, super admin)
 npm run seed
 
-# Start development server
+# 5. Start development server
 npm run dev
 ```
+
+The API will be at `http://localhost:3000`. The default `.env` uses `postgresql://user:password@localhost:5432/willbe` (matching `docker-compose.yml`).
+
+**One-liner (with Docker):**
+```bash
+./scripts/setup.sh && npm run dev
+```
+
+### Option B: Your own PostgreSQL or Neon
+
+Use this if you have a local PostgreSQL or a [Neon](https://neon.tech) (or other) cloud database.
+
+1. **Create a database** (if needed).
+   - **Local PostgreSQL:** `createdb willbe` (or create a DB named `willbe` in your tool).
+   - **Neon:** Create a project and copy the connection string from the dashboard.
+
+2. **Set your connection string** in `backend/.env`:
+   ```bash
+   cp backend/.env.example backend/.env
+   # Edit backend/.env and set DATABASE_URL, for example:
+   # Local:  DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/willbe
+   # Neon:   DATABASE_URL=postgresql://user:pass@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+   ```
+
+3. **Run migrations and seed:**
+   ```bash
+   npm run migrate
+   npm run seed
+   ```
+
+4. **Start the server:**
+   ```bash
+   npm run dev
+   ```
+
+   API will be at **http://localhost:3000**.
+
+#### I don’t know my database user or password
+
+**Easiest: use Neon (no user/password to remember)**  
+1. Go to [neon.tech](https://neon.tech) and sign up (free).  
+2. Create a new project and pick a region.  
+3. On the project dashboard, open **Connection details** and copy the **Connection string** (it already includes username and password in the URL).  
+4. Paste that whole string into `backend/.env` as `DATABASE_URL=...`.  
+You never need to look up user/password separately; the URL has everything.
+
+**Local PostgreSQL**  
+- **macOS (Homebrew):** Often there is no password. Try in `backend/.env`:  
+  `DATABASE_URL=postgresql://YOUR_MAC_USERNAME@localhost:5432/willbe`  
+  (Replace `YOUR_MAC_USERNAME` with the output of `whoami` in the terminal.)  
+  Create the DB first: `createdb willbe` (in Terminal).  
+- **If that fails:** Your install may use the `postgres` user. Try:  
+  `DATABASE_URL=postgresql://postgres@localhost:5432/willbe`  
+  (no password).  
+- **To set or reset a password:**  
+  - Connect: `psql postgres` (or `psql -U postgres`).  
+  - In `psql`: `ALTER USER postgres PASSWORD 'yourpassword';` then use  
+    `DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/willbe`.
 
 ### Scripts
 

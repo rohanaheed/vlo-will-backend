@@ -1,8 +1,13 @@
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 
-// Load environment variables
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+// Load .env from backend folder (same folder as server.js)
+const envPath = path.resolve(__dirname, '../../.env');
+const result = dotenv.config({ path: envPath });
+if (result.error && process.env.NODE_ENV !== 'test') {
+  console.warn('No backend/.env found at', envPath, '- using process env');
+}
 
 const config = {
   // Server

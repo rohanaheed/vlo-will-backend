@@ -1,29 +1,18 @@
-const up = async (db) => {
-  await db.schema
-    .alterTable("invoices")
-    .dropColumn("package_id")
-    .addColumn("package_id", "uuid", (col) =>
-      col.references("packages.id").onDelete("set null"),
-    )
-    .execute();
+const { sql } = require('kysely');
 
-  await db.schema
-    .alterTable("subscriptions")
-    .dropColumn("package_id")
-    .addColumn("package_id", "uuid", (col) =>
-      col.references("packages.id").onDelete("set null"),
-    )
-    .execute();
+const up = async (db) => {
+  await sql`ALTER TABLE invoices DROP COLUMN IF EXISTS package_id`.execute(db);
+  await sql`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS package_id uuid REFERENCES packages(id) ON DELETE SET NULL`.execute(db);
+
+  await sql`ALTER TABLE subscriptions DROP COLUMN IF EXISTS package_id`.execute(db);
+  await sql`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS package_id uuid REFERENCES packages(id) ON DELETE SET NULL`.execute(db);
 };
 
 const down = async (db) => {
-  await db.schema.alterTable("invoices").dropColumn("package_id").execute();
+  await sql`ALTER TABLE invoices DROP COLUMN IF EXISTS package_id`.execute(db);
 
-  await db.schema
-    .alterTable("subscriptions")
-    .dropColumn("package_id")
-    .addColumn("package_id", "varchar(255)", (col) => col.notNull())
-    .execute();
+  await sql`ALTER TABLE subscriptions DROP COLUMN IF EXISTS package_id`.execute(db);
+  await sql`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS package_id varchar(255) NOT NULL`.execute(db);
 };
 
 module.exports = { up, down };

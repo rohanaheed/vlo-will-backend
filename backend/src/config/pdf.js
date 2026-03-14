@@ -6,10 +6,11 @@ const fontkit = require("@pdf-lib/fontkit");
 const { config } = require("../config/index")
 
 const algorithm = "aes-256-cbc";
-const secret = config.encryption.secret;
+// Use ENCRYPTION_KEY from env; fallback for dev so app can start (set real key in production)
+const secret = config.encryption.secret || (config.nodeEnv === 'development' ? 'dev-encryption-key-change-in-production' : null);
 
 if (!secret) {
-  throw new Error("Encryption key not found in environment variables");
+  throw new Error("ENCRYPTION_KEY not set in environment variables (required in production)");
 }
 
 const key = crypto

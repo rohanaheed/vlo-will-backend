@@ -1,0 +1,21 @@
+# Local PostgreSQL for development. Start with: docker-compose up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: willbe-postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: willbe
+    ports:
+      - "5432:5432"
+    volumes:
+      - willbe_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d willbe"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  willbe_pgdata:

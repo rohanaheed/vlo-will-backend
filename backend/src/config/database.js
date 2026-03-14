@@ -3,11 +3,12 @@ const { Kysely, PostgresDialect } = require('kysely');
 const { config } = require('./index');
 const logger = require('../utils/logger');
 
-// Create PostgreSQL pool
+// Create PostgreSQL pool (fail fast if DB unreachable)
 const pool = new Pool({
   connectionString: config.database.url,
   min: config.database.poolMin,
   max: config.database.poolMax,
+  connectionTimeoutMillis: 10000,
 });
 
 // Log pool events

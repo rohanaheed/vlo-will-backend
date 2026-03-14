@@ -88,9 +88,11 @@ The API will be available at `http://localhost:3000`.
 | `npm run seed` | Run database seeds |
 | `npm run db:setup` | Run migrations + seeds |
 
-## API Endpoints
+## API Documentation
 
-### Authentication (`/api/v1/auth`)
+**Full API reference:** see [API.md](./API.md) for all endpoints, request/response bodies, and access control.
+
+### API Endpoints (summary)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

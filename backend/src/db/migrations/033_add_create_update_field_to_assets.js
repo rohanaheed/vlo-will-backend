@@ -1,17 +1,13 @@
+const { sql } = require('kysely');
+
 const up = async (db) => {
-  await db.schema
-    .alterTable('assets')
-    .addColumn('created_at', 'timestamptz', (col) => col.defaultTo('now()').notNull())
-    .addColumn('updated_at', 'timestamptz', (col) => col.defaultTo('now()').notNull())
-    .execute();
-}
+  await sql`ALTER TABLE assets ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()`.execute(db);
+  await sql`ALTER TABLE assets ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()`.execute(db);
+};
 
 const down = async (db) => {
-  await db.schema
-    .alterTable('assets')
-    .dropColumn('created_at')
-    .dropColumn('updated_at')
-    .execute();
-}
+  await sql`ALTER TABLE assets DROP COLUMN IF EXISTS created_at`.execute(db);
+  await sql`ALTER TABLE assets DROP COLUMN IF EXISTS updated_at`.execute(db);
+};
 
 module.exports = { up, down };

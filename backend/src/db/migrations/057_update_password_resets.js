@@ -1,21 +1,17 @@
+const { sql } = require('kysely');
+
 const up = async (db) => {
-    await db.schema
-    .alterTable('password_resets')
-    .addColumn('type', 'varchar(255)')
-    .addColumn('token', 'varchar(255)')
-    .addColumn('otp', 'varchar(255)')
-    .addColumn('updated_at', 'timestamptz', (col) => col.defaultTo('now') )
-    .execute();
-}
+  await sql`ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS type varchar(255)`.execute(db);
+  await sql`ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS token varchar(255)`.execute(db);
+  await sql`ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS otp varchar(255)`.execute(db);
+  await sql`ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()`.execute(db);
+};
 
 const down = async (db) => {
-    await db.schema
-    .alterTable('password_resets')
-    .dropColumn('type')
-    .dropColumn('email')
-    .dropColumn('otp')
-    .dropColumn('updated_at')
-    .execute();
-}
+  await sql`ALTER TABLE password_resets DROP COLUMN IF EXISTS type`.execute(db);
+  await sql`ALTER TABLE password_resets DROP COLUMN IF EXISTS token`.execute(db);
+  await sql`ALTER TABLE password_resets DROP COLUMN IF EXISTS otp`.execute(db);
+  await sql`ALTER TABLE password_resets DROP COLUMN IF EXISTS updated_at`.execute(db);
+};
 
 module.exports = { up, down };
